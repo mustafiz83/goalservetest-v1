@@ -42,11 +42,3 @@ body {
 }
 
 /* 🎯 THIS IS THE CRITICAL FIX */
-.heatmap-canvas {
-    /* Define the size for the visualization area */
-    width: 100%; /* Take up the full width of its parent */
-    height: 400px; /* **Set a fixed height or min-height** */
-    background-color: #f0f0f0; /* Optional: See the container boundaries */
-    border: 1px solid #ccc;
-    position: relative; /* Essential for absolute positioning of heatmap canvas */
-}

@@ -1,5 +1,3 @@
-// static/js/heatmap_viz.js
-
 let matchData = {
     localteam_players: {},
     visitorteam_players: {}
@@ -10,13 +8,13 @@ let currentSeason = ''; // Store the currently loaded season
 
 function loadFixtures() {
     const leagueId = document.getElementById('leagueId').value;
-    const season = document.getElementById('seasonInput').value.trim(); 
+    const season = document.getElementById('seasonInput').value.trim();
     const select = document.getElementById('fixture-select');
-    
+
     currentSeason = season; // Update global season tracker
 
     select.innerHTML = '<option value="">Loading Fixtures...</option>';
-    
+
     // Construct the API URL based on whether a season is provided
     let apiUrl = `/api/v1/fixtures/${leagueId}`;
     if (season) {
@@ -35,32 +33,32 @@ function loadFixtures() {
         })
         .then(data => {
             if (data.error) { throw new Error(data.error); }
-            
+
             // Add Season/League info to display
             const seasonDisplay = season ? ` (${season})` : ' (Current Season)';
             document.getElementById('league-display').textContent = data.league_name + seasonDisplay;
-            
+
             const fixtures = data.fixtures;
             select.innerHTML = '';
-            
+
             if (fixtures.length === 0) {
-                 select.innerHTML = '<option value="">No Fixtures Found</option>';
-                 return;
+                select.innerHTML = '<option value="">No Fixtures Found</option>';
+                return;
             }
-            
+
             const defaultOption = document.createElement('option');
             defaultOption.value = "";
             defaultOption.textContent = `-- Select a Match --`;
             select.appendChild(defaultOption);
 
             // Get default match ID from hidden input
-            const defaultMatchId = document.getElementById('matchId').value; 
+            const defaultMatchId = document.getElementById('matchId').value;
 
             fixtures.forEach(fixture => {
                 const option = document.createElement('option');
                 option.value = fixture.match_id;
                 option.textContent = fixture.display;
-                
+
                 // Automatically select the default match if it exists
                 if (fixture.match_id === defaultMatchId) {
                     option.selected = true;
@@ -68,7 +66,7 @@ function loadFixtures() {
                 }
                 select.appendChild(option);
             });
-            
+
             // Load the heatmap for the pre-selected match (if any)
             if (currentMatchId) {
                 // Pass the currentSeason when loading the heatmap
@@ -87,11 +85,11 @@ function loadFixtures() {
 function loadHeatmapFromFixture() {
     const leagueId = document.getElementById('leagueId').value;
     const matchId = document.getElementById('fixture-select').value;
-    currentMatchId = matchId; 
-    
+    currentMatchId = matchId;
+
     if (matchId) {
         // Pass the currentSeason when loading the heatmap
-        loadHeatmap(leagueId, matchId, currentSeason); 
+        loadHeatmap(leagueId, matchId, currentSeason);
     } else {
         // Clear all displays if nothing is selected
         document.getElementById('local-player-select').innerHTML = '<option value="">Select a Player</option>';
@@ -101,17 +99,17 @@ function loadHeatmapFromFixture() {
     }
 }
 
-function loadHeatmap(leagueId, matchId, season) { 
+function loadHeatmap(leagueId, matchId, season) {
     // Construct the API URL, including season if provided
     let apiUrl = `/api/v1/heatmap/${leagueId}/${matchId}`;
     if (season) {
         apiUrl += `/${encodeURIComponent(season)}`;
     }
-    
+
     // Reset Info Display
     document.getElementById('date-display').textContent = 'Loading Match Data...';
-    document.getElementById('score-display').textContent = '';           
-    document.getElementById('status-minute-display').textContent = '';    
+    document.getElementById('score-display').textContent = '';
+    document.getElementById('status-minute-display').textContent = '';
     document.getElementById('local-team-name-display').textContent = 'Local Team';
     document.getElementById('visitor-team-name-display').textContent = 'Visitor Team';
 
@@ -126,15 +124,15 @@ function loadHeatmap(leagueId, matchId, season) {
         })
         .then(data => {
             if (data.error) { throw new Error(data.error); }
-            
+
             // 1. Display Match Info
             document.getElementById('date-display').textContent = `Match Date: ${data.match_date}`;
-            
+
             // Display Score, Status, and Minute
             document.getElementById('local-team-name-display').textContent = data.localteam_name;
             document.getElementById('visitor-team-name-display').textContent = data.visitorteam_name;
             document.getElementById('score-display').textContent = `${data.localteam_name} ${data.final_score} ${data.visitorteam_name}`;
-            
+
             let statusText = `Status: ${data.match_status}`;
             if (data.match_status === 'Live' && data.live_minute !== 'N/A') {
                 statusText += ` (Min ${data.live_minute}')`;
@@ -144,7 +142,7 @@ function loadHeatmap(leagueId, matchId, season) {
             // 2. Store and Populate Player Data
             matchData.localteam_players = data.localteam_players;
             matchData.visitorteam_players = data.visitorteam_players;
-            
+
             populatePlayerSelect('local', data.localteam_players);
             populatePlayerSelect('visitor', data.visitorteam_players);
 
@@ -161,13 +159,19 @@ function loadHeatmap(leagueId, matchId, season) {
 
 function clearHeatmap(containerId) {
     const container = document.getElementById(containerId);
-    container.innerHTML = '';
     
+    // Remove only the generated canvas element and any previous message div
+    const children = Array.from(container.children);
+    children.forEach(child => {
+        if (child.tagName.toLowerCase() === 'canvas' || child.classList.contains('heatmap-message')) {
+            container.removeChild(child);
+        }
+    });
+
     const message = document.createElement('div');
+    message.classList.add('heatmap-message'); // Add a class for later removal
     message.style.textAlign = 'center';
-    message.style.paddingTop = '150px'; 
-    message.style.color = 'white';
-    message.style.fontWeight = 'bold';
+    message.style.paddingTop = '150px';
     message.innerText = `Select a player to view their heatmap.`;
     container.appendChild(message);
 }
@@ -176,16 +180,16 @@ function clearHeatmap(containerId) {
 function populatePlayerSelect(team, players) {
     const selectElementId = `${team}-player-select`;
     const select = document.getElementById(selectElementId);
-    
+
     select.innerHTML = '<option value="">Select a Player</option>';
 
     const playerIds = Object.keys(players).sort((a, b) => {
-         const nameA = (players[a].name || '').toLowerCase();
-         const nameB = (players[b].name || '').toLowerCase();
-         if (nameA < nameB) return -1;
-         if (nameA > nameB) return 1;
-         return 0;
-    }); 
+        const nameA = (players[a].name || '').toLowerCase();
+        const nameB = (players[b].name || '').toLowerCase();
+        if (nameA < nameB) return -1;
+        if (nameA > nameB) return 1;
+        return 0;
+    });
 
     if (playerIds.length === 0) {
         const option = document.createElement('option');
@@ -198,7 +202,7 @@ function populatePlayerSelect(team, players) {
     playerIds.forEach(id => {
         const player = players[id];
         const option = document.createElement('option');
-        option.textContent = player.name; 
+        option.textContent = player.name;
         option.value = id;
         select.appendChild(option);
     });
@@ -208,41 +212,39 @@ function displayPlayerHeatmap(team) {
     const selectElementId = `${team}-player-select`;
     const containerId = `${team}-team-heatmap`;
     const selectedPlayerId = document.getElementById(selectElementId).value;
-    
+
     clearHeatmap(containerId);
 
     if (!selectedPlayerId) {
         return;
     }
-    
+
     let playerData;
     if (team === 'local') {
         playerData = matchData.localteam_players[selectedPlayerId];
     } else {
         playerData = matchData.visitorteam_players[selectedPlayerId];
     }
-    
+
     if (playerData && playerData.heatmap_data.length > 0) {
         renderHeatmap(containerId, playerData.heatmap_data);
     } else {
         const container = document.getElementById(containerId);
-        container.innerHTML = '';
-        const message = document.createElement('div');
-        message.style.textAlign = 'center';
-        message.style.paddingTop = '150px';
-        message.style.color = 'yellow';
-        message.style.fontWeight = 'bold';
-        message.innerText = `No movement data found for selected player.`;
-        container.appendChild(message);
+        container.querySelector('.heatmap-message').innerText = `No movement data found for selected player.`;
+        container.querySelector('.heatmap-message').style.color = 'yellow';
     }
 }
 
 function renderHeatmap(containerId, heatmapData) {
     const container = document.getElementById(containerId);
-    
-    // Clear any previous heatmap/message
-    container.innerHTML = ''; 
 
+    // Remove the message div before rendering the heatmap
+    const message = container.querySelector('.heatmap-message');
+    if (message) {
+        container.removeChild(message);
+    }
+    
+    // Get the actual, responsive width and height of the container
     const width = container.offsetWidth;
     const height = container.offsetHeight;
 
@@ -258,16 +260,55 @@ function renderHeatmap(containerId, heatmapData) {
         minOpacity: 0,
         blur: .75
     });
+
+    // --- START OF UPDATED SCALING LOGIC (Responsive to Container Size) ---
     
+    // The responsive container's actual size (in pixels)
+    const containerWidth = width;
+    const containerHeight = height;
+
+    // Standard football pitch size (in arbitrary units)
+    const pitchWidthUnits = 100; 
+    const pitchHeightUnits = 60; 
+
+    // Assume raw data (point.x, point.y) is on a 0-100 grid.
+
+    // 1. Compute scaling factors based on the *actual* container dimensions
+    const scaleXFactor = containerWidth / pitchWidthUnits;
+    const scaleYFactor = containerHeight / pitchHeightUnits;
+
+    // 2. Use the smaller scale to keep the pitch ratio (maintaining aspect ratio)
+    const scale = Math.min(scaleXFactor, scaleYFactor);
+
+    // 3. Calculate the actual scaled dimensions of the pitch inside the container
+    const scaledPitchWidth = pitchWidthUnits * scale;
+    const scaledPitchHeight = pitchHeightUnits * scale;
+
+    // 4. Compute offsets to center the scaled pitch
+    const offsetX = (containerWidth - scaledPitchWidth) / 2; // center horizontally
+    const offsetY = (containerHeight - scaledPitchHeight) / 2; // center vertically
+
     const scaledData = heatmapData.map(point => {
+        // A. Map the original 0-100 data unit to the 0-100 pitch width unit
+        const pitchUnitX = point.x; 
+        
+        // B. Map the original 0-100 data unit to the 0-60 pitch height unit 
+        //    AND INVERT the Y-axis (assuming 0=bottom, 100=top in your raw data).
+        const pitchUnitY = (100 - point.y) * (pitchHeightUnits / 100);
+
         return {
-            // Scale x (0-100) to container width
-            x: Math.round(point.x * (width / 80)),
-            // Scale y (0-100) to container height
-            y: Math.round((100 - point.y) * (height / 80)),
+            // C. Scale the pitch unit and apply the center offset (X-coordinate)
+            x: Math.round(pitchUnitX * scale + offsetX),
+            
+            // D. Scale the pitch unit and apply the center offset (Y-coordinate)
+            y: Math.round(pitchUnitY * scale + offsetY),
+            
+            // h337 uses 'value' for point intensity
             value: point.value
         };
     });
+    
+    // --- END OF UPDATED SCALING LOGIC ---
 
     const maxVal = scaledData.reduce((max, point) => Math.max(max, point.value), 0) || 1;
 
@@ -276,13 +317,3 @@ function renderHeatmap(containerId, heatmapData) {
         data: scaledData
     });
 }
-
-// const scaledData = heatmapData.map(point => {
-//         return {
-//             // Scale x (0-100) to container width
-//             x: Math.round(point.x * (width / 100)),
-//             // INVERTED Y-AXIS: Map Y=0 (data top) to container bottom, and Y=100 (data bottom) to container top.
-//             y: Math.round((100 - point.y) * (height / 100)),
-//             value: point.value
-//         };
-//     });

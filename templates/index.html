@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goalserve Player Heatmap</title>
-    <!-- Load heatmap.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
     
     <style>
@@ -115,36 +114,51 @@
             display: block;
         }
         
-        /* ⚽ FOOTBALL PITCH BACKGROUND STYLES */
+        /* ⚽ FOOTBALL PITCH STYLES (Fixed to prevent double rendering) */
         .heatmap-canvas {
             width: 100%;
-            /* 1593 / 980 = 1.625. We use 100vw to ensure it's responsive. We divide by 2 because the two boxes are side-by-side. */
-            height: calc((100vw - 80px) / 2 / 1.625); 
-            max-height: 550px; /* Cap the max height on large screens */
+            /* 1441 / 871 ≈ 1.654. Using 1.654 for aspect ratio calculation */
+            height: calc((100vw - 80px) / 2 / 1.654); 
+            max-height: 550px; 
             
-            /* FIX: Use the correct /files/ path for the uploaded JPG artifact */
-            background: #186036 url('/static/images/football_pitch_2.jpg') no-repeat center center;
-            background-size: 100% 100%; /* Fit image exactly */
+            background-color: #186036; /* Darker green matching the image */
             
             position: relative; 
             margin-top: 10px;
             overflow: hidden; 
-            border-radius: 8px; /* Slightly round the pitch edges */
+            border-radius: 8px; 
         }
+
+        /* New: Use a pseudo-element for the image background (only one render) */
+        .heatmap-canvas::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            /* Using the correct relative path for the uploaded image */
+            background: url('/static/images/football_pitch_2.jpg') no-repeat center center;
+            background-size: 100% 100%; /* Fit image exactly */
+            z-index: 0; /* Ensure the image is behind the canvas */
+        }
+
         /* Media query to adjust height calculation on smaller screens where teams stack */
         @media (max-width: 767px) {
             .heatmap-canvas {
                 /* When stacked, the width is 100% of the viewport minus padding (40px) */
-                height: calc((100vw - 40px) / 1.625); 
+                height: calc((100vw - 40px) / 1.654); 
             }
         }
-
 
         /* Heatmap overlay settings */
         .heatmap-canvas canvas {
             opacity: 0.8; 
+            position: relative; /* Ensure the canvas is above the ::before pseudo-element */
+            z-index: 1; /* Ensure the canvas is above the image */
         }
 
+        /* Ensure the canvas element itself is positioned absolutely over the container */
         .heatmap-canvas > canvas {
             position: absolute;
             top: 0;
@@ -153,14 +167,12 @@
             height: 100%;
         }
         
-        /* Ensure the heatmap containers match the new image's dark green */
-        #local-team-heatmap, #visitor-team-heatmap {
-            background-color: #186036; /* Darker green matching the image */
-        }
         /* Player Selection Message Text Color (Ensured to be visible against dark green/pitch) */
         #local-team-heatmap div, #visitor-team-heatmap div {
             color: white; /* Default message color */
             text-shadow: 0 0 5px rgba(0, 0, 0, 0.8); /* Added shadow for readability */
+            z-index: 2; /* Ensure the message is above the canvas */
+            position: relative; /* Needed for z-index to work against the canvas sibling */
         }
     </style>
 </head>
@@ -172,7 +184,7 @@
         <input type="text" id="leagueId" value="{{ default_league_id }}">
         
         <label for="seasonInput">Season (YYYY-YYYY):</label>
-        <input type="text" id="seasonInput" value="2009-2010" placeholder="e.g., 2009-2010"> 
+        <input type="text" id="seasonInput" value="2023-2024" placeholder="e.g., 2023-2024"> 
 
         <button onclick="loadFixtures()">Load Fixtures</button>
         <br><br>
@@ -180,11 +192,9 @@
         <select id="fixture-select" onchange="loadHeatmapFromFixture()">
             <option value="">-- Load League Fixtures Above --</option>
         </select>
-        <!-- Hidden input for the default match ID used in loadFixtures -->
         <input type="hidden" id="matchId" value="{{ default_match_id }}">
     </div>
 
-    <!-- Match Information Display -->
     <div id="match-info">
         <h2 id="league-display"></h2>
         <p id="date-display"></p>
