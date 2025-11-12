@@ -20,7 +20,7 @@ app.include_router(api_router)
 async def home(request: Request):
     # Default values for initial load
     default_league_id = "1204"  
-    default_match_id = "4200027" 
+    default_match_id = "3838001" 
     
     return templates.TemplateResponse(
         "index.html", 

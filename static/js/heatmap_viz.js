@@ -262,9 +262,9 @@ function renderHeatmap(containerId, heatmapData) {
     const scaledData = heatmapData.map(point => {
         return {
             // Scale x (0-100) to container width
-            x: Math.round(point.x * (width / 100)),
+            x: Math.round(point.x * (width / 80)),
             // Scale y (0-100) to container height
-            y: Math.round(point.y * (height / 100)),
+            y: Math.round((100 - point.y) * (height / 80)),
             value: point.value
         };
     });
@@ -276,3 +276,13 @@ function renderHeatmap(containerId, heatmapData) {
         data: scaledData
     });
 }
+
+// const scaledData = heatmapData.map(point => {
+//         return {
+//             // Scale x (0-100) to container width
+//             x: Math.round(point.x * (width / 100)),
+//             // INVERTED Y-AXIS: Map Y=0 (data top) to container bottom, and Y=100 (data bottom) to container top.
+//             y: Math.round((100 - point.y) * (height / 100)),
+//             value: point.value
+//         };
+//     });
