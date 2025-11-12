@@ -175,8 +175,10 @@
             position: relative; /* Needed for z-index to work against the canvas sibling */
         }
     </style>
+    <link rel="stylesheet" href="/static/css/nav.css">
 </head>
 <body>
+    <div id="top-nav-container" aria-hidden="false"></div>
     <h1>⚽ Player Heatmap Visualization</h1>
     
     <div class="controls">
@@ -227,5 +229,6 @@
         // Start by loading fixtures for the default League ID and Season on page load
         document.addEventListener('DOMContentLoaded', loadFixtures);
     </script>
+    <script src="/static/js/topnav.js"></script>
 </body>
 </html>

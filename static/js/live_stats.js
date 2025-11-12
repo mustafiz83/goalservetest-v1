@@ -202,5 +202,5 @@ document.getElementById('refreshBtn').addEventListener('click', loadLiveMatches)
 // Initial load
 loadLiveMatches();
 
-// Auto-refresh every 30 seconds
-setInterval(loadLiveMatches, 30000);
+// // Auto-refresh every 30 seconds
+// setInterval(loadLiveMatches, 30000);
