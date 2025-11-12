@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 # Import the router we just created
 from app.api.endpoints import router as api_router
+from app.api.live_endpoints import router as football_live_router
 
 app = FastAPI()
 
@@ -13,6 +14,7 @@ templates = Jinja2Templates(directory="templates")
 
 # --- Include the API router here ---
 app.include_router(api_router)
+app.include_router(football_live_router)
 
 
 # Frontend Endpoint (serves the HTML)
@@ -30,3 +32,14 @@ async def home(request: Request):
             "default_match_id": default_match_id
         }
     )
+
+from fastapi.responses import FileResponse
+
+@app.get("/live")
+async def serve_live_stats():
+    """Serve the live stats dashboard"""
+    return FileResponse("templates/live_stats.html")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}

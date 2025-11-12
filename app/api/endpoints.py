@@ -41,3 +41,5 @@ async def get_match_heatmap(league_id: str, match_id: str, season: str | None = 
         raise HTTPException(status_code=status_code, detail=data["error"])
         
     return data
+
+
