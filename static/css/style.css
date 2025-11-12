@@ -1,0 +1,52 @@
+/* Styling for the field and heatmap container */
+body {
+    font-family: sans-serif;
+    text-align: center;
+    background-color: #f0f0f0;
+}
+
+.field-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin: 20px auto;
+    width: 90vw; /* Adjust width as needed */
+    max-width: 1200px;
+}
+
+.heatmap-canvas {
+    width: 45%; /* Two fields side by side */
+    height: 600px; 
+    /* Football pitch background */
+    background-color: #588f27; 
+    background-image: 
+        radial-gradient(circle at 50% 50%, #fff 10px, transparent 10px), /* Center circle */
+        linear-gradient(to bottom, #fff 1px, transparent 1px), /* Center line */
+        linear-gradient(to right, #fff 1px, transparent 1px), /* Touchlines */
+        linear-gradient(to left, #fff 1px, transparent 1px),
+        linear-gradient(to top, #fff 1px, transparent 1px);
+    background-repeat: no-repeat, repeat-y, repeat-x, repeat-x, repeat-y;
+    background-position: 50% 50%, 50% 0, 0 0, 100% 0, 0 0;
+    position: relative;
+    border: 5px solid white;
+}
+
+.teams-container {
+    display: flex; /* Makes local and visitor teams side-by-side */
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.teams-container > div {
+    flex: 1; /* Makes both team containers take equal width */
+}
+
+/* 🎯 THIS IS THE CRITICAL FIX */
+.heatmap-canvas {
+    /* Define the size for the visualization area */
+    width: 100%; /* Take up the full width of its parent */
+    height: 400px; /* **Set a fixed height or min-height** */
+    background-color: #f0f0f0; /* Optional: See the container boundaries */
+    border: 1px solid #ccc;
+    position: relative; /* Essential for absolute positioning of heatmap canvas */
+}

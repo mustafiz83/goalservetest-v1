@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Goalserve Player Heatmap</title>
+    <!-- Load heatmap.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
+    
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4; }
+        .controls { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: white; text-align: center; }
+        .controls label, .controls input, .controls button { margin-right: 10px; }
+        /* Adjusted width for both League ID and Season */
+        .controls input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 120px; text-align: center; } 
+        .controls select { min-width: 300px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .controls button {
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 8px 15px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .controls button:hover { background-color: #45a049; }
+        
+        #match-info { 
+            text-align: center; 
+            margin-bottom: 20px; 
+            padding: 10px; 
+            background-color: #e9e9e9; 
+            border-radius: 8px; 
+        }
+        
+        #score-display {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 5px 0;
+            color: #333;
+        }
+
+        #status-minute-display {
+            font-style: italic;
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .teams-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .teams-container {
+                flex-direction: row;
+            }
+        }
+
+        .team-box {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: white;
+            text-align: center;
+        }
+        
+        /* ⚽ FOOTBALL PITCH BACKGROUND STYLES */
+        .heatmap-canvas {
+            width: 100%;
+            /* Maintain a good aspect ratio for a football pitch */
+            height: 450px; 
+            
+            /* Background image simulation - You need to place your image in /static/images/football_pitch.png */
+            background: #1e7041 url('/static/images/football_pitch.png') no-repeat center center;
+            background-size: 100% 100%; 
+            
+            position: relative; 
+            margin-top: 10px;
+            overflow: hidden; 
+        }
+
+        /* Ensure the heatmap is slightly transparent to see the pitch lines */
+        .heatmap-canvas canvas {
+            opacity: 0.8; 
+            /* Optional: helps the color blend with the green background */
+            mix-blend-mode: multiply; 
+        }
+
+        .heatmap-canvas > canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #local-team-heatmap {
+            background-color: rgba(0, 100, 0, 0.9); /* Darker overlay for left side */
+        }
+        #visitor-team-heatmap {
+            background-color: rgba(0, 100, 0, 0.9); /* Darker overlay for right side */
+        }
+    </style>
+</head>
+<body>
+    <h1>⚽ Player Heatmap Visualization</h1>
+    
+    <div class="controls">
+        <label for="leagueId">League ID:</label>
+        <input type="text" id="leagueId" value="{{ default_league_id }}">
+        
+        <label for="seasonInput">Season (YYYY-YYYY):</label>
+        <input type="text" id="seasonInput" value="2009-2010" placeholder="e.g., 2009-2010"> 
+
+        <button onclick="loadFixtures()">Load Fixtures</button>
+        <br><br>
+        <label for="fixture-select">Select Match:</label>
+        <select id="fixture-select" onchange="loadHeatmapFromFixture()">
+            <option value="">-- Load League Fixtures Above --</option>
+        </select>
+        <!-- Hidden input for the default match ID used in loadFixtures -->
+        <input type="hidden" id="matchId" value="{{ default_match_id }}">
+    </div>
+
+    <!-- Match Information Display -->
+    <div id="match-info">
+        <h2 id="league-display"></h2>
+        <p id="date-display"></p>
+        
+        <p id="status-minute-display"></p>
+        <div id="score-display"></div>
+        
+    </div>
+    
+    <div class="teams-container">
+        <div class="team-box">
+            <h2 id="local-team-name-display">Local Team</h2>
+            <select id="local-player-select" onchange="displayPlayerHeatmap('local')">
+                <option value="">Select a Player</option>
+            </select>
+            <div id="local-team-heatmap" class="heatmap-canvas"></div>
+        </div>
+        <div class="team-box">
+            <h2 id="visitor-team-name-display">Visitor Team</h2>
+            <select id="visitor-player-select" onchange="displayPlayerHeatmap('visitor')">
+                <option value="">Select a Player</option>
+            </select>
+            <div id="visitor-team-heatmap" class="heatmap-canvas"></div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', path='/js/heatmap_viz.js') }}"></script>
+    
+    <script>
+        // Start by loading fixtures for the default League ID and Season on page load
+        document.addEventListener('DOMContentLoaded', loadFixtures);
+    </script>
+</body>
+</html>
+
