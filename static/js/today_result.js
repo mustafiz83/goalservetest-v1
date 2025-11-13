@@ -7,7 +7,7 @@ async function loadLiveMatches() {
         const contentDiv = document.getElementById('content');
         contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading live matches...</p></div>';
 
-        const response = await fetch('/api/v1/football/live');
+        const response = await fetch('/api/v1/football/today');
         const data = await response.json();
 
         if (!response.ok) {

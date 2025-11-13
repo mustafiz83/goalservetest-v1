@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Football Statistics</title>
+    <link rel="stylesheet" href="/static/css/today_result.css">
+    <link rel="stylesheet" href="/static/css/nav.css">
+</head>
+<body>
+    <div id="top-nav-container" aria-hidden="false"></div>
+    <div class="container">
+        <header class="header">
+            <h1>⚽ Today's All Matches</h1>
+            <p class="subtitle">Real-time match data and statistics</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <input type="text" id="leagueFilter" placeholder="Filter by league ID...">
+                <button id="filterBtn" class="btn btn-secondary">Filter</button>
+                <button id="clearFilterBtn" class="btn btn-secondary">Clear</button>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh Now</button>
+            </div>
+            <div class="update-info">
+                <span id="lastUpdated">Last updated: --</span>
+                <span id="matchCount">Loading...</span>
+            </div>
+        </div>
+
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading live matches...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/today_result.js"></script>
+    <script src="/static/js/topnav.js"></script>
+</body>
+</html>
