@@ -1,7 +1,10 @@
 import httpx
 import os
+import re
 from typing import Dict, List, Any
-# from datetime import datetime # Kept for completeness, though still unused
+
+# Note: The datetime import is not currently used in the provided code, but kept for completeness.
+# from datetime import datetime
 
 GOALSERVE_API_KEY = os.getenv("GOALSERVE_API_KEY", "your_api_key_here")
 BASE_URL = "http://www.goalserve.com/getfeed"
@@ -61,15 +64,13 @@ class FootballLiveService:
                     match_list = [match_list] if match_list else []
                 
                 for match in match_list:
-                    # FIX: Ensure 'match' is a dictionary before processing (handles XML-to-JSON quirks)
+                    # Ensure 'match' is a dictionary before processing (handles XML-to-JSON quirks)
                     if isinstance(match, dict) and match:
                         processed_match = FootballLiveService._process_match(category, match)
                         matches.append(processed_match)
-                    print("processed")
         
         except Exception as e:
             # Print is for debugging, a more robust system might use a logger
-          
             print(f"Error parsing live matches: {e}")
         
         return matches
@@ -77,30 +78,29 @@ class FootballLiveService:
     @staticmethod
     def _process_match(category: Dict[str, Any], match: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process and format individual match data. 
+        Process and format individual match data with maximum safety checks.
         Safely uses .get() with default {} to prevent 'NoneType' errors.
         """
         
+        
+        # Safely retrieve top-level structures, defaulting to {}
         local_team = match.get("localteam") or {}
         visitor_team = match.get("visitorteam") or {}
-        
-        # FIX: Ensure live_stats is a dict, defaulting to {} if missing/None
         live_stats = match.get("live_stats") or {}
+        events_data = match.get("events") or {}
+        halftime_data = match.get("ht") or {}
         
         # Safely extract and parse stats string
-        stats_value = live_stats.get("@value", "") if isinstance(live_stats, dict) else ""
+        stats_value = ""
+        if isinstance(live_stats, dict):
+            stats_value = live_stats.get("@value", "")
         parsed_stats = FootballLiveService._parse_live_stats(stats_value)
         
-        # FIX: Ensure events_data is a dict, defaulting to {} if missing/None
-        events_data = match.get("events") or {}
-        events = events_data.get("event") or {}
-        
-        # Ensure events is a list for iteration, even if it's a single dict or None
+        # Process events, ensuring we start with a list
+        events = events_data.get("event", [])
         if not isinstance(events, list):
-            events = [events] if events else []
-        
-        # FIX: Ensure halftime_data is a dict, defaulting to {} if missing/None
-        halftime_data = match.get("ht") or {}
+            # Check if events is a single dict, otherwise treat it as empty list
+            events = [events] if isinstance(events, dict) else []
         
         # Prepare processed events list
         processed_events = [
@@ -116,7 +116,7 @@ class FootballLiveService:
                 "assist_id": event.get("@assistid"),
                 "timestamp": event.get("@ts")
             }
-            # FIX: Ensure event is a dictionary before accessing its keys
+            # Ensure event is a dictionary before accessing its keys
             for event in events if isinstance(event, dict) 
         ]
         
@@ -148,19 +148,19 @@ class FootballLiveService:
             },
             "halftime_score": halftime_data.get("@score"),
             "stats": {
-                "corners": parsed_stats.get("corner") or {},
-                "yellow_cards": parsed_stats.get("yellowcard") or {},
-                "red_cards": parsed_stats.get("redcard") or {},
-                "possession": parsed_stats.get("posession") or {},
-                "attacks": parsed_stats.get("attacks") or {},
-                "dangerous_attacks": parsed_stats.get("dangerousattacks") or {},
-                "shots_on_target": parsed_stats.get("ontarget") or {},
-                "shots_off_target": parsed_stats.get("offtarget") or {},
-                "throw_ins": parsed_stats.get("throwin") or {},
-                "free_kicks": parsed_stats.get("freekick") or {},
-                "goal_kicks": parsed_stats.get("goalkick") or {},
-                "penalties": parsed_stats.get("penalty") or {},
-                "substitutions": parsed_stats.get("substitution") or {}
+                "corners": parsed_stats.get("corner", {}),
+                "yellow_cards": parsed_stats.get("yellowcard", {}),
+                "red_cards": parsed_stats.get("redcard", {}),
+                "possession": parsed_stats.get("posession", {}),
+                "attacks": parsed_stats.get("attacks", {}),
+                "dangerous_attacks": parsed_stats.get("dangerousattacks", {}),
+                "shots_on_target": parsed_stats.get("ontarget", {}),
+                "shots_off_target": parsed_stats.get("offtarget", {}),
+                "throw_ins": parsed_stats.get("throwin", {}),
+                "free_kicks": parsed_stats.get("freekick", {}),
+                "goal_kicks": parsed_stats.get("goalkick", {}),
+                "penalties": parsed_stats.get("penalty", {}),
+                "substitutions": parsed_stats.get("substitution", {})
             },
             "events": processed_events
         }
@@ -168,68 +168,76 @@ class FootballLiveService:
     @staticmethod
     def _parse_live_stats(stats_string: str) -> Dict[str, Any]:
         """
-        Parse pipe-separated live stats into dictionary (e.g., ICorner=home:5,away:6).
-        This version specifically handles the complex 'home:X,away:Y' value structure.
+        Parse pipe-separated live stats, using regex for the complex 'home:X,away:Y' format.
+        This version finalized the cleanup of trailing junk data (e.g., ',16:{IRegTimeScore=...}')
         """
         stats: Dict[str, Any] = {}
         if not stats_string:
             return stats
         
+        # --- FIX: Cleanup Trailing Junk ---
+        # The valid stats string always ends with the content of the last stat (e.g., IPosession=...)
+        # The invalid data starts with ',16:{...'
+        
+        # Find the index of the first character of the junk data: ',16:'
+        junk_start_index = stats_string.find(',16:{')
+        
+        if junk_start_index != -1:
+            # If junk is found, trim the string immediately before the comma
+            stats_string = stats_string[:junk_start_index]
+
+        # Final safety cleanup for stray trailing characters like '|' or '}'
+        stats_string = stats_string.rstrip('|').rstrip('}')
+        
+        # --- End Cleanup ---
+
         pairs = stats_string.split("|")
+        
+        # Regex to find the home and away numbers in the complex stat string
+        # e.g., looks for 'home:' followed by digits, and 'away:' followed by digits
+        # This handles 'home:X,away:Y' and correctly extracts X and Y.
+        regex_pattern = re.compile(r'home:(\d*).*away:(\d*)')
         
         for pair in pairs:
             if "=" in pair:
                 try:
-                    # Split the key=value pair (e.g., "ICorner=home:5,away:6")
                     key, value = pair.split("=", 1)
                 except ValueError:
                     continue 
 
-                # Remove 'I' prefix and convert to lowercase
                 key = key.replace("I", "").lower()
                 
-                # --- NEW ROBUST PARSING LOGIC ---
-                
-                # We expect the value to contain two numeric parts separated by ',', ':', or both.
-                
-                # Try to find the numeric values directly.
-                home_str = ""
-                away_str = ""
-                
-                # Example: value = "home:5,away:6"
-                if "home:" in value and "away:" in value:
-                    # 1. Split on the comma to separate the home and away groups
-                    home_group, away_group = value.split(",", 1)
-                    
-                    # 2. Extract the number after the colon in each group
-                    # For "home:5", home_str becomes "5"
-                    if ":" in home_group:
-                        home_str = home_group.split(":", 1)[-1].strip()
-                    
-                    # For "away:6", away_str becomes "6"
-                    if ":" in away_group:
-                        away_str = away_group.split(":", 1)[-1].strip()
+                home = 0
+                away = 0
 
-                elif ":" in value:
-                    # Fallback for simpler 'X:Y' or complex 'X:Y:Z' formats (using maxsplit=1 safety)
+                # Check if the value matches the complex 'home:X,away:Y' format
+                match = regex_pattern.search(value)
+                
+                if match:
+                    home_str = match.group(1)
+                    away_str = match.group(2)
+                    
+                    if home_str.isdigit():
+                        home = int(home_str)
+                    if away_str.isdigit():
+                        away = int(away_str)
+                    
+                    stats[key] = {"home": home, "away": away}
+                else:
+                    # Fallback for simpler formats (e.g., 'X:Y')
                     parts = value.split(":", 1)
                     if len(parts) == 2:
                         home_str = parts[0]
-                        away_str = parts[1].split(",", 1)[0] # Grab value before comma if it exists
-                    elif len(parts) == 1:
-                        # Handle cases like IPosession=home:,away:} where no colon is used
-                        pass
-                
-                # Convert to int, treating empty strings or non-digits as 0
-                try:
-                    home = int(home_str) if home_str and home_str.isdigit() else 0
-                    away = int(away_str) if away_str and away_str.isdigit() else 0
-                    
-                    stats[key] = {"home": home, "away": away}
-                except Exception:
-                    # Fallback for unexpected format
-                    stats[key] = {"home": 0, "away": 0}
-            
-            # --- END NEW ROBUST PARSING LOGIC ---
-            
+                        away_str = parts[1]
+                        
+                        if home_str.isdigit():
+                            home = int(home_str)
+                        if away_str.isdigit():
+                            away = int(away_str)
+
+                        stats[key] = {"home": home, "away": away}
+                    else:
+                        stats[key] = value
+        
         return stats
+    
