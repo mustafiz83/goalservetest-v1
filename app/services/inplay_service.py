@@ -1,49 +1,100 @@
-import json
-import os
-import io
-import gzip
 import requests
+import gzip
+import io
 import time
-import schedule
+import os
+import json
 import threading
+import schedule
 from datetime import datetime
 from typing import Optional, Dict, Any
-from app.core.config import settings
 
-# --- Configuration ---
-API_ENDPOINT = "http://inplay.goalserve.com/inplay-soccer.gz"
-INTERVAL_SECONDS = 5 # Schedule the fetch every 30 seconds
+# --- Configuration and Global State ---
 
-# Global flag to control the scheduler thread loop (used for graceful shutdown)
+# Scheduler Control Flags
 STOP_SCHEDULER_FLAG = threading.Event()
-scheduler_thread: threading.Thread | None = None
-INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB
+scheduler_thread: Optional[threading.Thread] = None
 
-# --- Core Logic ---
+# Job Configuration
+INTERVAL_SECONDS = 30 # The scheduler interval (30 seconds requested by the user)
+INPLAY_SCHEDULER_JOB = True # Set to False to disable the scheduler completely
+
+# API Configuration
+# NOTE: Replace 'YOUR_API_KEY_HERE' with your actual Goalserve API key if needed.
+GOALSERVE_API_URL = "http://inplay.goalserve.com/inplay-soccer.gz" 
+API_KEY = "YOUR_API_KEY_HERE" 
+
+# --- Core Data Fetching and Processing Functions ---
+
+def fetch_and_decompress_data(api_url: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches the response, attempts to decompress it (GZIP), and falls back to 
+    parsing as plain JSON if decompression fails.
+    """
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Requesting Goalserve content...")
+    
+    try:
+        response = requests.get(api_url, timeout=15)
+        response.raise_for_status()
+
+        # 1. ATTEMPT DECOMPRESSION (Original GZIP logic)
+        try:
+            compressed_file_stream = io.BytesIO(response.content)
+            decompressed_string = gzip.GzipFile(
+                fileobj=compressed_file_stream, 
+                mode='rb'
+            ).read().decode('utf-8')
+            
+            data = json.loads(decompressed_string)
+            print("Status: SUCCESS. Data retrieved, decompressed (GZIP), and parsed.")
+            return data
+
+        except OSError as e:
+            # 2. IF GZIP FAILS, ATTEMPT TO PARSE AS PLAIN JSON
+            # This handles the reported error where the API returns uncompressed JSON.
+            if "Not a gzipped file" in str(e) and response.content.startswith(b'{'):
+                print("Status: GZIP DECOMPRESSION FAILED. Attempting to parse as plain JSON.")
+                try:
+                    # Treat the content as plain text JSON
+                    data = response.json() 
+                    print("Status: SUCCESS. Data retrieved and parsed (PLAIN JSON).")
+                    return data
+                except json.JSONDecodeError as json_e:
+                    print(f"Status: FAILED TO PROCESS PLAIN JSON. Error: {json_e}")
+                    return None
+            else:
+                # Handle other decompression errors
+                print(f"Status: FAILED TO PROCESS GZ. Unhandled OSError: {e}")
+                return None
+        
+        except json.JSONDecodeError as e:
+            # Handle JSON decoding error after successful decompression attempt
+            print(f"Status: FAILED TO PROCESS JSON. Error: {e}")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        print(f"Status: CRITICAL NETWORK ERROR. Exception: {e}")
+        return None
 
 def process_api_response(data: Dict[str, Any]):
     """
     Processes the API response and saves snapshots to individual history files 
-    for each event.
-
-    It assumes the 'data' dictionary has a structure like:
-    {'events': {'event_id_1': {'info': {...}}, 'event_id_2': {'info': {...}}}}
+    for each event (events.{event_id}.json).
     """
     if not isinstance(data, dict) or 'events' not in data or not data['events']:
         print("Scheduler: Warning: 'events' key not found or is empty.")
         return
 
+    processed_count = 0
     # Iterate through all event keys in the 'events' dictionary
     for event_id, event_data in data['events'].items():
         try:
             info = event_data.get('info')
-            if not info: 
-                print(f"Scheduler: Skipping event {event_id} due to missing 'info'.")
-                continue
+            if not info: continue
             
             # 1. Create the new snapshot from the event's 'info' data
             snapshot = {
-                "timestamp": datetime.now().isoformat(), # Add current timestamp for tracking
+                "timestamp": datetime.now().isoformat(),
                 "minute": info.get("minute"),
                 "seconds": info.get("seconds"),
                 "id": info.get("id"),
@@ -63,6 +114,7 @@ def process_api_response(data: Dict[str, Any]):
                         try:
                             history = json.loads(file_content)
                         except json.JSONDecodeError:
+                            # Handle corrupted history file by starting fresh
                             print(f"Scheduler: Error decoding history file {file_path}. Starting new history.")
 
             # 3. Append the new snapshot
@@ -71,60 +123,30 @@ def process_api_response(data: Dict[str, Any]):
             # 4. Write the updated history back to the file
             with open(file_path, 'w') as f:
                 json.dump(history, f, indent=4)
+                
+            processed_count += 1
 
         except Exception as e:
-            # Log errors without interrupting the scheduler
             print(f"Scheduler Error processing event {event_id}: {e}")
             continue
 
-    print(f"Scheduler: Successfully processed and saved data for {len(data['events'])} events.")
+    print(f"Scheduler: Successfully processed and saved data for {processed_count} events.")
 
-# --- Core Fetching Logic ---
 
-def fetch_and_decompress_data() -> Optional[Dict[str, Any]]:
+def fetch_and_process_data():
     """
-    Fetches the raw binary response (.gz file), decompresses it, and parses 
-    the result as JSON.
+    The main job function executed by the scheduler.
     """
-    api_url = API_ENDPOINT
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Requesting Goalserve .gz file content...")
-    
-    try:
-        response = requests.get(api_url, timeout=15)
-        response.raise_for_status()
+    data_content = fetch_and_decompress_data(GOALSERVE_API_URL)
 
-        # --- Primary Path: Attempt to Decompress and Parse JSON ---
-        try:
-            compressed_file_stream = io.BytesIO(response.content)
-            decompressed_string = gzip.GzipFile(
-                fileobj=compressed_file_stream, 
-                mode='rb'
-            ).read().decode('utf-8')
-            
-            # Parse the decompressed string as JSON
-            data = json.loads(decompressed_string)
-            
-            print("Status: SUCCESS. Data retrieved, decompressed, and parsed as JSON.")
-            return data
+    if isinstance(data_content, dict):
+        print("\n--- Starting Data Processing ---")
+        process_api_response(data_content)
+        print("--- Data Processing Complete ---\n")
+    else:
+        print("\nCRITICAL FAILURE: Job run skipped due to previous network/parsing error.\n")
 
-        except OSError as e:
-            # Secondary Path: Decompression Failure (likely a plain text API error)
-            print(f"Status: FAILED TO DECOMPRESS (OSError: {e}).")
-            error_message = response.text
-            print(f"Goalserve Error Response (Plain Text): {error_message[:200]}...")
-            return None # Treat API errors that aren't JSON as a failed run
 
-        except json.JSONDecodeError as e:
-            # Decompressed successfully, but content isn't valid JSON
-            print(f"Status: FAILED TO PARSE JSON. {e}")
-            return None
-
-    except requests.exceptions.RequestException as e:
-        # Handle network issues (DNS, timeouts) and unhandled HTTP errors.
-        print(f"Status: CRITICAL NETWORK ERROR. An exception occurred: {e}")
-        return None
-    
-    
 # --- Thread Runner ---
 
 def run_continuously():
@@ -133,11 +155,13 @@ def run_continuously():
     It checks for pending jobs every second until the stop flag is set.
     """
     # Run the job immediately on startup
-    fetch_and_decompress_data()
+    fetch_and_process_data()
     
     while not STOP_SCHEDULER_FLAG.is_set():
         schedule.run_pending()
         time.sleep(1) # Prevents high CPU usage
+        
+    print("Scheduler: Thread gracefully stopped.")
 
 # --- Public API for FastAPI Integration ---
 
@@ -145,34 +169,45 @@ def start_scheduler():
     """
     Initializes and starts the background scheduler thread.
     """
-    if(INPLAY_SCHEDULER_JOB == False):
-       print("Scheduler: INPLAY_SCHEDULER_JOB is diabled")
-       return
-    print("Scheduler: INPLAY_SCHEDULER_JOB is enabled")
     global scheduler_thread
+    
+    if(INPLAY_SCHEDULER_JOB == False):
+        print("Scheduler: INPLAY_SCHEDULER_JOB is diabled")
+        return
+        
+    print("Scheduler: INPLAY_SCHEDULER_JOB is enabled")
+    
     if scheduler_thread is None or not scheduler_thread.is_alive():
         print(f"FastAPI Startup: Starting scheduler thread to run every {INTERVAL_SECONDS} seconds...")
+        
+        # Reset the stop flag in case it was previously set
+        STOP_SCHEDULER_FLAG.clear() 
+        
         # Configure the schedule library
-        schedule.every(INTERVAL_SECONDS).seconds.do(fetch_and_decompress_data)
+        schedule.every(INTERVAL_SECONDS).seconds.do(fetch_and_process_data)
         
         # Initialize and start the thread
         scheduler_thread = threading.Thread(target=run_continuously, daemon=True)
         scheduler_thread.start()
         print("FastAPI Startup: Background scheduler thread started.")
+    else:
+        print("FastAPI Startup: Scheduler thread is already running.")
 
 
 def stop_scheduler():
     """
-    Sets the flag to gracefully stop the background scheduler thread.
+    Gracefully stops the background scheduler thread.
     """
     global scheduler_thread
     if scheduler_thread and scheduler_thread.is_alive():
         print("FastAPI Shutdown: Setting stop flag for scheduler thread...")
-        # Signal the thread to stop its loop
         STOP_SCHEDULER_FLAG.set()
-        # Wait for the thread to finish cleanly
-        scheduler_thread.join(timeout=5) # Wait up to 5 seconds
+        # Give the thread a moment to shut down gracefully
+        scheduler_thread.join(timeout=5) 
         if scheduler_thread.is_alive():
-            print("FastAPI Shutdown: Warning: Thread did not terminate gracefully.")
+             print("Warning: Scheduler thread did not stop gracefully within 5 seconds.")
         else:
-            print("FastAPI Shutdown: Background scheduler thread terminated gracefully.")
+             print("FastAPI Shutdown: Scheduler thread stopped.")
+        scheduler_thread = None
+    else:
+        print("FastAPI Shutdown: Scheduler thread was not active.")
