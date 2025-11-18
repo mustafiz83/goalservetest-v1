@@ -6,7 +6,7 @@ import time
 import schedule
 import threading
 from typing import Dict, Any
-
+from app.core.config import settings
 
 # --- Configuration ---
 API_ENDPOINT = "http://inplay.goalserve.com/inplay-soccer.gz"
@@ -15,6 +15,7 @@ INTERVAL_SECONDS = 5 # Schedule the fetch every 30 seconds
 # Global flag to control the scheduler thread loop (used for graceful shutdown)
 STOP_SCHEDULER_FLAG = threading.Event()
 scheduler_thread: threading.Thread | None = None
+INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB
 
 # --- Core Logic ---
 
@@ -106,6 +107,10 @@ def start_scheduler():
     """
     Initializes and starts the background scheduler thread.
     """
+    if(INPLAY_SCHEDULER_JOB == False):
+       print("Scheduler: INPLAY_SCHEDULER_JOB is diabled")
+       return
+    print("Scheduler: INPLAY_SCHEDULER_JOB is enabled")
     global scheduler_thread
     if scheduler_thread is None or not scheduler_thread.is_alive():
         print(f"FastAPI Startup: Starting scheduler thread to run every {INTERVAL_SECONDS} seconds...")
