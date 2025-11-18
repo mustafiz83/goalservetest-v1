@@ -8,6 +8,7 @@ import threading
 import schedule
 from datetime import datetime
 from typing import Optional, Dict, Any
+from app.core.config import settings
 
 # --- Configuration and Global State ---
 
@@ -17,7 +18,7 @@ scheduler_thread: Optional[threading.Thread] = None
 
 # Job Configuration
 INTERVAL_SECONDS = 30 # The scheduler interval (30 seconds requested by the user)
-INPLAY_SCHEDULER_JOB = True # Set to False to disable the scheduler completely
+INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB # Set to False to disable the scheduler completely
 
 # API Configuration
 # NOTE: Replace 'YOUR_API_KEY_HERE' with your actual Goalserve API key if needed.
@@ -91,7 +92,8 @@ def process_api_response(data: Dict[str, Any]):
         try:
             info = event_data.get('info')
             if not info: continue
-            
+            mid = info.get("mid")
+            league_id = info.get("league_id")
             # 1. Create the new snapshot from the event's 'info' data
             snapshot = {
                 "timestamp": datetime.now().isoformat(),
@@ -100,10 +102,13 @@ def process_api_response(data: Dict[str, Any]):
                 "id": info.get("id"),
                 "name": info.get("name"),
                 "ball_pos": info.get("ball_pos"),
-                "state_info": info.get("state_info") 
+                "state_info": info.get("state_info"),
+                "mid": info.get("mid"),
+                "state": info.get("state"),
+                "league_id": info.get("league_id"),
             }
 
-            file_path = f"events.{event_id}.json"
+            file_path = f"data/events.{league_id}.{mid}.{event_id}.json"
             history = []
 
             # 2. Load existing history (if file exists)
