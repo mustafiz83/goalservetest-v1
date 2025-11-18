@@ -3,3 +3,4 @@ uvicorn[standard]
 python-dotenv
 requests # For making external API calls
 jinja2 # For serving HTML templates
+schedule 

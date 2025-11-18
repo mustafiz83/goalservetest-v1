@@ -18,7 +18,7 @@ class FootballLiveService:
         try:
             async with httpx.AsyncClient() as client:
                 url = f"{BASE_URL}/{GOALSERVE_API_KEY}/soccernew/live?json=1"
-                print(url)
+                # print(url)
                 response = await client.get(url, timeout=15.0)
                 response.raise_for_status()
                 
@@ -55,6 +55,8 @@ class FootballLiveService:
             for category in categories:
                 # Handle cases where 'matches' might be missing
                 matches_data = category.get("matches", {})
+
+                league_id = category.get("@id")
                 
                 # 'match' can be a single dict, a list of dicts, or None
                 match_list = matches_data.get("match", [])
@@ -66,7 +68,7 @@ class FootballLiveService:
                 for match in match_list:
                     # Ensure 'match' is a dictionary before processing (handles XML-to-JSON quirks)
                     if isinstance(match, dict) and match:
-                        processed_match = FootballLiveService._process_match(category, match)
+                        processed_match = FootballLiveService._process_match(category, match, league_id)
                         matches.append(processed_match)
         
         except Exception as e:
@@ -76,7 +78,7 @@ class FootballLiveService:
         return matches
     
     @staticmethod
-    def _process_match(category: Dict[str, Any], match: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_match(category: Dict[str, Any], match: Dict[str, Any], league_id: Any) -> Dict[str, Any]:
         """
         Process and format individual match data with maximum safety checks.
         Safely uses .get() with default {} to prevent 'NoneType' errors.
@@ -121,6 +123,7 @@ class FootballLiveService:
         ]
         
         return {
+            "league_id": league_id,
             "match_id": match.get("@id"),
             "static_id": match.get("@static_id"),
             "fix_id": match.get("@fix_id"),

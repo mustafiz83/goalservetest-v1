@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from app.api.endpoints import router as api_router
 from app.api.live_endpoints import router as football_live_router
 from app.api.today_result_endpoint import router as today_result
+from app.services.inplay_service import *
 
 app = FastAPI()
 
@@ -52,3 +53,20 @@ async def serve_live_stats():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+def startup_event():
+    """
+    Called when the FastAPI application starts up.
+    Starts the background scheduler thread for data ingestion.
+    """
+    start_scheduler()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """
+    Called when the FastAPI application shuts down.
+    Gracefully stops the background scheduler thread.
+    """
+    stop_scheduler()

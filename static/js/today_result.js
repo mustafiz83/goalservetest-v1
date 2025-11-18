@@ -55,12 +55,15 @@ function createMatchCard(match) {
     const statusLabel = getStatusLabel(match.status);
     const statusClass = getStatusClass(match.status);
 
+    const league_id = match.league.id;
+    console.log("League", league_id);
+
     const recentEvents = events.slice(0, 4).map(event => createEventElement(event)).join('');
 
     return `
         <div class="match-card">
             <div class="league-info">
-                <span class="league-badge">${match.league.is_cup ? '🏆' : '⚽'} ${match.league.name}</span>
+                <span class="league-badge">${match.league.is_cup ? '🏆' : '⚽'} ${match.league.name} ${match.league?.id || 'u'}</span>
                 <span>${match.date} ${match.time}</span>
             </div>
 
