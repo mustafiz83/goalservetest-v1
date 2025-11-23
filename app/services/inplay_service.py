@@ -9,6 +9,7 @@ import schedule
 from datetime import datetime
 from typing import Optional, Dict, Any
 from app.core.config import settings
+import re
 
 # --- Configuration and Global State ---
 
@@ -17,7 +18,7 @@ STOP_SCHEDULER_FLAG = threading.Event()
 scheduler_thread: Optional[threading.Thread] = None
 
 # Job Configuration
-INTERVAL_SECONDS = 2 # The scheduler interval (10 seconds requested by the user)
+INTERVAL_SECONDS = 1 # The scheduler interval (1 seconds requested by the user)
 INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB # Set to False to disable the scheduler completely
 
 # API Configuration
@@ -35,7 +36,7 @@ def fetch_and_decompress_data(api_url: str) -> Optional[Dict[str, Any]]:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Requesting Goalserve content...")
     
     try:
-        response = requests.get(api_url, timeout=15)
+        response = requests.get(api_url, timeout=2)
         response.raise_for_status()
 
         # 1. ATTEMPT DECOMPRESSION (Original GZIP logic)
@@ -97,23 +98,25 @@ def process_api_response(data: Dict[str, Any]):
             # if(mid != "126570764"):
             #     continue
             league_id = info.get("league_id")
+            name = info.get("name")
+            safe_name = re.sub(r'\W+', '_', name)
             if(league_id != "70"):
                 continue
             # 1. Create the new snapshot from the event's 'info' data
             snapshot = {
-                "timestamp": datetime.now().isoformat(),
+                # "timestamp": datetime.now().isoformat(),
                 "minute": info.get("minute"),
                 "seconds": info.get("seconds"),
-                "id": info.get("id"),
-                "name": info.get("name"),
+                # "id": info.get("id"),
+                # "name": info.get("name"),
                 "ball_pos": info.get("ball_pos"),
                 "state_info": info.get("state_info"),
-                "mid": info.get("mid"),
-                "state": info.get("state"),
-                "league_id": info.get("league_id"),
+                # "mid": info.get("mid"),
+                # "state": info.get("state"),
+                # "league_id": info.get("league_id"),
             }
 
-            file_path = f"data/events.{league_id}.{mid}.{event_id}.json"
+            file_path = f"data/events.{league_id}.{id}.{mid}.{safe_name}.json"
             history = []
 
             # 2. Load existing history (if file exists)
