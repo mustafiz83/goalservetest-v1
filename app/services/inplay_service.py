@@ -94,7 +94,7 @@ def process_api_response(data: Dict[str, Any]):
             info = event_data.get('info')
             if not info: continue
             mid = info.get("mid")
-            id = info.get("id"),
+            id = info.get("id")
             # if(mid != "126570764"):
             #     continue
             league_id = info.get("league_id")
