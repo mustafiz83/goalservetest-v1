@@ -17,7 +17,7 @@ STOP_SCHEDULER_FLAG = threading.Event()
 scheduler_thread: Optional[threading.Thread] = None
 
 # Job Configuration
-INTERVAL_SECONDS = 30 # The scheduler interval (30 seconds requested by the user)
+INTERVAL_SECONDS = 2 # The scheduler interval (10 seconds requested by the user)
 INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB # Set to False to disable the scheduler completely
 
 # API Configuration
@@ -93,7 +93,12 @@ def process_api_response(data: Dict[str, Any]):
             info = event_data.get('info')
             if not info: continue
             mid = info.get("mid")
+            id = info.get("id"),
+            # if(mid != "126570764"):
+            #     continue
             league_id = info.get("league_id")
+            if(league_id != "70"):
+                continue
             # 1. Create the new snapshot from the event's 'info' data
             snapshot = {
                 "timestamp": datetime.now().isoformat(),
