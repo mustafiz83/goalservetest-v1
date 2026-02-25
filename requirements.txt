@@ -5,3 +5,4 @@ requests # For making external API calls
 jinja2 # For serving HTML templates
 schedule
 websockets
+httpx

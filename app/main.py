@@ -2,14 +2,50 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
+from fastapi.openapi.utils import get_openapi
 from app.api.endpoints import router as api_router
 from app.api.live_endpoints import router as football_live_router
 from app.api.today_result_endpoint import router as today_result
 from app.api.ws_endpoints import router as ws_router
 from app.services.inplay_service import *
-from app.services.ws_soccer_service import soccer_ws_service
 
 app = FastAPI()
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title="Goalserve API",
+        version="1.0.0",
+        routes=app.routes,
+    )
+    # Manually inject WebSocket endpoint — OpenAPI/Swagger hides WS routes by default
+    schema["paths"]["/ws/soccer"] = {
+        "get": {
+            "tags": ["soccer-websocket"],
+            "summary": "Live Soccer WebSocket Feed",
+            "description": (
+                "Connect via **WebSocket** (not HTTP GET) to receive a real-time stream "
+                "of live soccer match updates from Goalserve.\n\n"
+                "**URL:** `ws://<host>/ws/soccer`\n\n"
+                "Each pushed frame contains a `mt` field indicating the message type:\n"
+                "- `avl` – full snapshot of all live events (sent immediately on connect)\n"
+                "- `updt` – incremental update for a single event\n\n"
+                "Use **`GET /api/ws/soccer`** below to do a one-shot test and see the "
+                "live data structure without opening a persistent WebSocket."
+            ),
+            "operationId": "ws_soccer_feed",
+            "responses": {
+                "101": {"description": "Switching Protocols — WebSocket connection established"}
+            },
+        }
+    }
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -59,10 +95,8 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     start_scheduler()
-    soccer_ws_service.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     stop_scheduler()
-    await soccer_ws_service.stop()
