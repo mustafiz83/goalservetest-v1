@@ -1,23 +1,33 @@
 """
 Goalserve Inplay WebSocket service for soccer.
+Reference: https://documentation.goalserve.com/v1/
 
-Authentication flow (per Goalserve docs):
+Authentication flow:
   1. POST http://live.goalserve.com/api/v1/auth/gettoken
      Body: {"apiKey": "<GOALSERVE_API_KEY>"}
      Response: {"token": "<JWT>"}   (valid 60 min)
 
   2. Connect: ws://live.goalserve.com/ws/soccer?tkn=<JWT>
 
-Message types (field "mt"):
-  "avl"  – full snapshot of currently available live events
-  "updt" – incremental update for a single event
+Message types (field "mt") — official format:
 
-Public surface used by the rest of the app:
-  soccer_ws_service.start()              – called on FastAPI startup
-  soccer_ws_service.stop()              – called on FastAPI shutdown
-  soccer_ws_service.handle_client(ws)   – used by WS proxy endpoint
-  soccer_ws_service.snapshot(timeout)  – used by REST test endpoint
-  soccer_ws_service.status             – used by status endpoint
+  "avl"  – available events list.
+           Shape: { mt, sp, dt, bm, evts: [{id, mid, cmp_id, cmp_name, t1, t2, pc, fi}] }
+           NOTE: avl is a LIGHTWEIGHT list (team names + competition only).
+                 It does NOT carry match stats, score, or ball position.
+
+  "updt" – full update for ONE event.
+           Shape: { mt, sp, id, mid, cmp_id, cmp_name, t1, t2,
+                    et, stp, bl, xy, pc, sc,
+                    cms, stats, stat, odds }
+           KEY FIELD:  xy  – "x,y" ball coordinates (string | null)
+                       This is the live ball position for that event.
+
+Ball position fields by API:
+  REST  inplay feed  → info.ball_pos  ("x,y" string or null)
+  WS    updt message → xy             ("x,y" string or null)
+
+Player x/y coordinates: NOT available in any Goalserve endpoint.
 """
 
 import asyncio
@@ -37,9 +47,26 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Stat name normalisation  (Goalserve "I" prefix → friendly key)
+# Stat name maps
 # ---------------------------------------------------------------------------
-_STAT_MAP: Dict[str, str] = {
+
+# WebSocket updt compact stat codes  (official docs)
+_WS_STAT_MAP: Dict[str, str] = {
+    "c":  "corners",
+    "f":  "free_kicks",
+    "o":  "offsides",
+    "p":  "penalties",
+    "r":  "red_cards",
+    "t":  "throw_ins",
+    "y":  "yellow_cards",
+    "s":  "substitutions",
+    "g":  "goal_kicks",
+    "a":  "goals",
+    "h1": "first_half_score",
+}
+
+# REST inplay feed stat names ("I" prefix style) – kept for fallback
+_REST_STAT_MAP: Dict[str, str] = {
     "ITeam": "team",
     "IGoal": "goals",
     "ICorner": "corners",
@@ -127,121 +154,174 @@ token_manager = TokenManager()
 # Parsers  –  avl / updt message handlers
 # ---------------------------------------------------------------------------
 
-def _parse_stats(raw_stats: Dict[str, Any]) -> Dict[str, Any]:
-    stats: Dict[str, Any] = {}
-    for _, stat in raw_stats.items():
-        if not isinstance(stat, dict):
-            continue
-        raw_name = stat.get("name", "")
-        key = _STAT_MAP.get(raw_name, raw_name.lstrip("I").lower())
-        home_val = stat.get("home")
-        away_val = stat.get("away")
-        h_str = str(home_val).lstrip("-")
-        a_str = str(away_val).lstrip("-")
-        if h_str.isdigit() and a_str.isdigit():
-            stats[key] = {"home": _safe_int(home_val), "away": _safe_int(away_val)}
-        else:
-            stats[key] = {"home": home_val, "away": away_val}
-    return stats
+def _kit(kit_obj: Any) -> Optional[str]:
+    """Extract comma-separated shirt colors from a kit object."""
+    if isinstance(kit_obj, dict):
+        return kit_obj.get("si")
+    return None
 
 
-def _parse_timeline(raw_extra: Dict[str, Any]) -> List[Dict[str, Any]]:
-    timeline = []
-    for _, entry in raw_extra.items():
-        if isinstance(entry, dict) and entry.get("value"):
-            timeline.append({
-                "code": entry.get("code"),
-                "minute": _safe_int(entry.get("minute")),
-                "description": entry.get("value"),
-            })
-    return timeline
-
-
-def _parse_event(event_id: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalise a single event dict."""
-    info = event_data.get("info") or {}
-    team_info = event_data.get("team_info") or {}
-    core = event_data.get("core") or {}
-    home_info = team_info.get("home") or {}
-    away_info = team_info.get("away") or {}
-
+def _team_brief(team_obj: Any) -> Dict[str, Any]:
+    """Parse a t1/t2 object from WS messages."""
+    if not isinstance(team_obj, dict):
+        return {}
     return {
-        "event_id": event_id,
-        "match": {
-            "id": info.get("id"),
-            "mid": info.get("mid"),
-            "name": info.get("name"),
-            "sport": info.get("sport"),
-            "league": info.get("league"),
-            "start_time": info.get("start_time"),
-            "start_date": info.get("start_date"),
-            "period": info.get("period"),
-            "score": info.get("score"),
-            "minute": info.get("minute"),
-            "seconds": info.get("seconds"),
-            "state": info.get("state"),
-            "ball_pos": info.get("ball_pos"),
-            "state_info": info.get("state_info"),
-        },
-        "home_team": {
-            "name": home_info.get("name"),
-            "score": _safe_int(home_info.get("score")),
-            "kit_color": home_info.get("kit_color"),
-        },
-        "away_team": {
-            "name": away_info.get("name"),
-            "score": _safe_int(away_info.get("score")),
-            "kit_color": away_info.get("kit_color"),
-        },
-        "core": {
-            "stopped": core.get("stopped") == "1",
-            "blocked": core.get("blocked") == "1",
-            "finished": core.get("finished") == "1",
-            "updated": core.get("updated"),
-        },
-        "stats": _parse_stats(event_data.get("stats") or {}),
-        "timeline": _parse_timeline(event_data.get("extra") or {}),
+        "name": team_obj.get("n"),
+        "kit_colors": _kit(team_obj.get("kit")),
+        "kit_shorts": (team_obj.get("kit") or {}).get("so"),
     }
 
 
+# ---------------------------------------------------------------------------
+# avl parser
+# ---------------------------------------------------------------------------
+
 def _parse_avl(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse an 'avl' (available events snapshot) message."""
-    raw_events: Dict[str, Any] = data.get("events") or {}
-    events = [
-        _parse_event(eid, edata)
-        for eid, edata in raw_events.items()
-        if isinstance(edata, dict)
-    ]
+    """
+    Parse an 'avl' message (official WS format).
+
+    avl is a LIGHTWEIGHT available-events list — team names + competition only.
+    It does NOT carry match stats, score, or ball position.
+    Full event data arrives in subsequent 'updt' messages.
+
+    Official shape:
+      { mt, sp, dt, bm, evts: [{id, mid, cmp_id, cmp_name, t1, t2, pc, fi}] }
+    """
+    raw_evts = data.get("evts") or []
+    if isinstance(raw_evts, dict):
+        raw_evts = list(raw_evts.values())
+
+    events = []
+    for evt in raw_evts:
+        if not isinstance(evt, dict):
+            continue
+        events.append({
+            "event_id": evt.get("id"),
+            "mid": evt.get("mid"),
+            "competition": {
+                "id": evt.get("cmp_id"),
+                "name": evt.get("cmp_name"),
+            },
+            "home_team": _team_brief(evt.get("t1")),
+            "away_team": _team_brief(evt.get("t2")),
+            "period_code": evt.get("pc"),
+            "provider_event_id": evt.get("fi"),
+        })
+
     return {
         "mt": "avl",
-        "updated": data.get("updated"),
-        "updated_ts": data.get("updated_ts"),
+        "sport": data.get("sp"),
+        "updated": data.get("dt"),
+        "bookmaker": data.get("bm"),
         "total_events": len(events),
         "events": events,
     }
 
 
+# ---------------------------------------------------------------------------
+# updt parser
+# ---------------------------------------------------------------------------
+
+def _parse_ws_stats(raw: Any) -> Dict[str, Any]:
+    """
+    Parse compact WS stats object, e.g. {"c": [1,2], "y": [0,1], ...}
+    Each value is [home, away].
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for code, value in raw.items():
+        key = _WS_STAT_MAP.get(code, code)
+        if isinstance(value, list) and len(value) == 2:
+            out[key] = {"home": value[0], "away": value[1]}
+        else:
+            out[key] = value
+    return out
+
+
+def _parse_ws_timeline(raw: Any) -> List[Dict[str, Any]]:
+    """
+    Parse cms (comments) array from updt messages.
+    Shape: [{id, mt, p, tm, n}]
+    """
+    if not isinstance(raw, list):
+        return []
+    timeline = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        timeline.append({
+            "id": entry.get("id"),
+            "code": entry.get("mt"),
+            "period": entry.get("p"),
+            "time_seconds": entry.get("tm"),
+            "description": entry.get("n"),
+        })
+    return timeline
+
+
 def _parse_updt(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse an 'updt' (single event update) message."""
-    raw_events: Dict[str, Any] = data.get("events") or {}
-    # updt usually contains a single event
-    events = [
-        _parse_event(eid, edata)
-        for eid, edata in raw_events.items()
-        if isinstance(edata, dict)
-    ]
+    """
+    Parse an 'updt' message — full event update for a single match.
+
+    Official shape:
+      { mt, sp, ctry_id, bm, st, uptd, pt,
+        id, mid, cmp_id, cmp_name,
+        t1, t2,
+        et, stp, bl,
+        xy,       ← BALL POSITION ("x,y" string or null)
+        pc, sc,
+        cms, stats, stat, odds }
+
+    Ball position note:
+      xy is the real-time ball x,y coordinate pair (same as ball_pos in REST).
+      Values are floats in range ~0.0–1.0 representing pitch percentage.
+      null when tracking data is unavailable for the event.
+    """
+    t1 = data.get("t1") or {}
+    t2 = data.get("t2") or {}
+
+    xy_raw: Optional[str] = data.get("xy")
+    ball_pos: Optional[Dict[str, Any]] = None
+    if xy_raw:
+        parts = xy_raw.split(",")
+        if len(parts) == 2:
+            try:
+                ball_pos = {"x": float(parts[0]), "y": float(parts[1]), "raw": xy_raw}
+            except ValueError:
+                ball_pos = {"raw": xy_raw}
+
     return {
         "mt": "updt",
-        "updated": data.get("updated"),
-        "updated_ts": data.get("updated_ts"),
-        "events": events,
+        "event_id": data.get("id"),
+        "mid": data.get("mid"),
+        "sport": data.get("sp"),
+        "bookmaker": data.get("bm"),
+        "competition": {
+            "id": data.get("cmp_id"),
+            "name": data.get("cmp_name"),
+        },
+        "home_team": _team_brief(t1),
+        "away_team": _team_brief(t2),
+        "match": {
+            "updated": data.get("uptd"),
+            "start_ts": data.get("st"),
+            "elapsed_seconds": data.get("et"),
+            "period_code": data.get("pc"),
+            "state_code": data.get("sc"),
+            "stopped": bool(data.get("stp")),
+            "blocked": bool(data.get("bl")),
+        },
+        "ball_position": ball_pos,
+        "stats": _parse_ws_stats(data.get("stats")),
+        "timeline": _parse_ws_timeline(data.get("cms")),
     }
 
 
 def parse_message(raw: str) -> Optional[Dict[str, Any]]:
     """
-    Dispatch a raw Goalserve WS frame to the correct parser by 'mt' field.
-    Returns None on parse failure.
+    Dispatch a raw Goalserve WS frame to the correct parser.
+    Returns None on parse failure or unknown message type.
     """
     try:
         data = json.loads(raw)
@@ -257,10 +337,6 @@ def parse_message(raw: str) -> Optional[Dict[str, Any]]:
         return _parse_avl(data)
     if mt == "updt":
         return _parse_updt(data)
-
-    # Unknown / no mt field — attempt avl-style parse as fallback
-    if "events" in data:
-        return _parse_avl(data)
 
     logger.debug("ws_soccer: unrecognised message type: %s", mt)
     return None

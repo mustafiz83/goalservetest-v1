@@ -1,5 +1,5 @@
 import requests
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 import datetime 
 from collections import Counter # Use Counter for efficient frequency calculation
 from app.core.config import settings
@@ -288,3 +288,167 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
     except requests.exceptions.RequestException as e:
         print(f"Heatmap API Error: {e}")
         return {"error": f"Failed to fetch heatmap data: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# Match Positions  –  heatmap + lineup + ball_pos in one response
+# ---------------------------------------------------------------------------
+
+def _parse_player_lineup(player_raw: Any) -> Dict[str, Any]:
+    """Normalise a single player node from the commentaries lineup."""
+    if not isinstance(player_raw, dict):
+        return {}
+    return {
+        "id":        player_raw.get("@id"),
+        "name":      player_raw.get("@name"),
+        "number":    player_raw.get("@number"),
+        "pos":       player_raw.get("@pos"),       # e.g. "GK", "CB", "CM", "ST"
+        "formation_pos": player_raw.get("@formation_place"),  # grid slot in formation
+        "goals":     player_raw.get("@goals"),
+        "assists":   player_raw.get("@assists"),
+        "yellow":    player_raw.get("@yellowcards"),
+        "red":       player_raw.get("@redcards"),
+        "minutes":   player_raw.get("@minutes_played"),
+        "substitute": player_raw.get("@substitute") == "True",
+    }
+
+
+def _extract_lineup(team_node: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull lineup players and subs from a commentary team node."""
+    player_raw = team_node.get("player", [])
+    if not isinstance(player_raw, list):
+        player_raw = [player_raw] if player_raw else []
+
+    starters = [_parse_player_lineup(p) for p in player_raw if p.get("@substitute") != "True"]
+    subs     = [_parse_player_lineup(p) for p in player_raw if p.get("@substitute") == "True"]
+
+    return {
+        "name":       team_node.get("@name"),
+        "id":         team_node.get("@id"),
+        "formation":  team_node.get("@formation"),
+        "starters":   starters,
+        "substitutes": subs,
+    }
+
+
+async def fetch_match_positions(match_id: str, league_id: str, season: str | None = None) -> Dict[str, Any]:
+    """
+    Combined endpoint: returns for a given match —
+      • lineup (formation position + stats for each player)
+      • player_heatmaps  (aggregated pitch coverage density per player)
+      • ball_pos         (current live ball position from the inplay feed, if available)
+
+    Sources:
+      • commentaries/{league_id}.xml?json=1         → lineup
+      • commentaries/{league_id}_heatmap.xml?json=1 → heatmap
+      • inplay.goalserve.com/inplay-soccer.gz        → ball_pos (best-effort)
+    """
+    import gzip, io
+
+    # 1. Fetch commentary data (lineups + live stats)
+    commentary_url = f"{BASE_URL}{API_KEY}/commentaries/{league_id}.xml?json=1"
+    heatmap_url    = f"{BASE_URL}{API_KEY}/commentaries/{league_id}_heatmap.xml?json=1"
+
+    lineup_data: Dict[str, Any] = {}
+    heatmap_data: Dict[str, Any] = {}
+
+    try:
+        r = requests.get(commentary_url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        c_data = r.json()
+
+        tournament = c_data.get("commentaries", {}).get("tournament", {})
+        matches = tournament.get("match", [])
+        if not isinstance(matches, list):
+            matches = [matches] if matches else []
+
+        target = next((m for m in matches if m.get("@id") == match_id), None)
+
+        if target:
+            local_node   = target.get("localteam", {})
+            visitor_node = target.get("visitorteam", {})
+            lineup_data = {
+                "match_id":    match_id,
+                "status":      target.get("@status"),
+                "minute":      target.get("@minute"),
+                "score":       target.get("@score"),
+                "home_team":   _extract_lineup(local_node),
+                "away_team":   _extract_lineup(visitor_node),
+            }
+    except Exception as e:
+        lineup_data = {"error": f"Commentary fetch failed: {e}"}
+
+    # 2. Fetch heatmap data
+    try:
+        r = requests.get(heatmap_url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        h_data = r.json()
+
+        tournament = h_data.get("commentaries", {}).get("tournament", {})
+        matches = tournament.get("match", [])
+        if not isinstance(matches, list):
+            matches = [matches] if matches else []
+
+        target = next((m for m in matches if m.get("@id") == match_id), None)
+
+        if target:
+            heatmaps_node = target.get("heatmaps", {})
+            local_hm   = process_team_heatmaps(heatmaps_node.get("localteam", {}))
+            visitor_hm = process_team_heatmaps(heatmaps_node.get("visitorteam", {}))
+
+            # Enrich with player names from league roster
+            league_details = fetch_league_data(league_id)
+            all_players = league_details.get("all_players", {})
+
+            def _enrich(hm_map):
+                return {
+                    pid: {**v, "name": all_players.get(pid, f"Player {pid}")}
+                    for pid, v in hm_map.items()
+                }
+
+            heatmap_data = {
+                "home_players": _enrich(local_hm),
+                "away_players": _enrich(visitor_hm),
+                "note": "Heatmap is accumulated pitch coverage — not real-time position",
+            }
+        else:
+            heatmap_data = {"note": "Heatmap not yet available for this match"}
+
+    except Exception as e:
+        heatmap_data = {"error": f"Heatmap fetch failed: {e}"}
+
+    # 3. Fetch live ball_pos from inplay feed (best-effort)
+    ball_pos = None
+    inplay_event_id = None
+    try:
+        r = requests.get("http://inplay.goalserve.com/inplay-soccer.gz", timeout=5, stream=True)
+        r.raise_for_status()
+        try:
+            raw = gzip.decompress(r.content).decode("utf-8")
+        except OSError:
+            raw = r.text
+        inplay_json = json.loads(raw)
+
+        for eid, event in (inplay_json.get("events") or {}).items():
+            info = event.get("info") or {}
+            if info.get("mid") == match_id:
+                ball_pos = info.get("ball_pos")
+                inplay_event_id = eid
+                break
+    except Exception:
+        pass  # ball_pos stays None — inplay not available or match not live
+
+    return {
+        "match_id":       match_id,
+        "league_id":      league_id,
+        "lineup":         lineup_data,
+        "player_heatmap": heatmap_data,
+        "ball_position": {
+            "raw":            ball_pos,
+            "inplay_event_id": inplay_event_id,
+            "note": (
+                "Coordinates are 'x,y'. Format varies: normalised 0.0–1.0 OR integer 0–100 percentage. "
+                "null = match not currently live in the inplay feed."
+            ),
+        },
+    }
