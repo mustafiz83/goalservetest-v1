@@ -2,11 +2,12 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
-# Import the router we just created
 from app.api.endpoints import router as api_router
 from app.api.live_endpoints import router as football_live_router
 from app.api.today_result_endpoint import router as today_result
+from app.api.ws_endpoints import router as ws_router
 from app.services.inplay_service import *
+from app.services.ws_soccer_service import soccer_ws_service
 
 app = FastAPI()
 
@@ -14,10 +15,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
-# --- Include the API router here ---
 app.include_router(api_router)
 app.include_router(football_live_router)
 app.include_router(today_result)
+app.include_router(ws_router)
 
 
 # Frontend Endpoint (serves the HTML)
@@ -56,17 +57,12 @@ async def health_check():
 
 
 @app.on_event("startup")
-def startup_event():
-    """
-    Called when the FastAPI application starts up.
-    Starts the background scheduler thread for data ingestion.
-    """
+async def startup_event():
     start_scheduler()
+    soccer_ws_service.start()
+
 
 @app.on_event("shutdown")
-def shutdown_event():
-    """
-    Called when the FastAPI application shuts down.
-    Gracefully stops the background scheduler thread.
-    """
+async def shutdown_event():
     stop_scheduler()
+    await soccer_ws_service.stop()
