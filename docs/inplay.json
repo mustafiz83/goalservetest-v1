@@ -1,0 +1,669 @@
+{
+  "updated": "09.14.2021 11:24:08",
+  "updated_ts": 1631618648131,
+  "events": {
+    "65012526": {
+      "core": {
+        "safe": "",
+        "removed": "",
+        "stopped": "0",
+        "blocked": "0",
+        "finished": "0",
+        "updated": "14.09.2021 11:24:07",
+        "updated_ts": "1631618647262"
+      },
+      "info": {
+        "id": "65012526",
+        "mid": "5062504",
+        "bet365id": "107929286",
+        "name": "Transport United FC vs Paro FC",
+        "sport": "soccer",
+        "league": "Bhutan Premier League",
+        "start_time": "11:00",
+        "start_date": "14.09.2021",
+        "start_ts": "1631617200",
+        "period": "2nd Half",
+        "score": "1:1",
+        "ball_pos": "",
+        "state_info": null,
+        "state": "11002",
+        "minute": "64",
+        "seconds": "63:42"
+      },
+      "team_info": {
+        "home": {
+          "name": "Transport United FC",
+          "score": "1",
+          "color": "",
+          "kit_color": "#F0F0F0,#F0F0F0,#D6003D,#D6003D",
+          "Serve": ""
+        },
+        "away": {
+          "name": "Paro FC",
+          "score": "1",
+          "color": "",
+          "kit_color": "#2B72DE,#2B72DE",
+          "Serve": ""
+        }
+      },
+      "bonus": {},
+      "stream": "",
+      "stats": {
+        "0": {
+          "name": "ITeam",
+          "home": "Transport United FC",
+          "away": "Paro FC"
+        },
+        "1": {
+          "name": "IGoal",
+          "home": "1",
+          "away": "1"
+        },
+        "2": {
+          "name": "ICorner",
+          "home": "3",
+          "away": "4"
+        },
+        "3": {
+          "name": "IYellowCard",
+          "home": "1",
+          "away": "1"
+        },
+        "4": {
+          "name": "IRedCard",
+          "home": "0",
+          "away": "0"
+        },
+        "5": {
+          "name": "IThrowIn",
+          "home": "0",
+          "away": "0"
+        },
+        "6": {
+          "name": "IFreeKick",
+          "home": "0",
+          "away": "0"
+        },
+        "7": {
+          "name": "IGoalKick",
+          "home": "0",
+          "away": "0"
+        },
+        "8": {
+          "name": "IPenalty",
+          "home": "0",
+          "away": "0"
+        },
+        "9": {
+          "name": "ISubstitution",
+          "home": "1",
+          "away": "2"
+        },
+        "10": {
+          "name": "IAttacks",
+          "home": "127",
+          "away": "118"
+        },
+        "11": {
+          "name": "IDangerousAttacks",
+          "home": "70",
+          "away": "86"
+        },
+        "12": {
+          "name": "IOnTarget",
+          "home": "2",
+          "away": "3"
+        },
+        "13": {
+          "name": "IOffTarget",
+          "home": "3",
+          "away": "3"
+        },
+        "14": {
+          "name": "IPosession",
+          "home": "48",
+          "away": "52"
+        }
+      },
+      "extra": {
+        "0": {
+          "code": "252",
+          "minute": "8",
+          "value": "8' - 1st Corner - Paro FC"
+        },
+        "1": {
+          "code": "",
+          "minute": "0",
+          "value": "0:0 Goals 00:00 - 09:59"
+        },
+        "2": {
+          "code": "",
+          "minute": "0",
+          "value": "0:1 Corners 00:00 - 09:59"
+        }
+      },
+      "history": {},
+      "odds": {
+        "1": {
+          "id": 1,
+          "name": "Home Team Goals",
+          "short_name": "Home Team Goals",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "6501252610": {
+              "id": "6501252610",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "8.5",
+              "suspend": "0",
+              "handicap": "2.5"
+            },
+            "6501252611": {
+              "id": "6501252611",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.05",
+              "suspend": "0",
+              "handicap": "2.5"
+            },
+            "6501252612": {
+              "id": "6501252612",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "2.625",
+              "suspend": "0",
+              "handicap": "1.5"
+            },
+            "6501252613": {
+              "id": "6501252613",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.444",
+              "suspend": "0",
+              "handicap": "1.5"
+            }
+          }
+        },
+        "2": {
+          "id": 2,
+          "name": "Away Team Goals",
+          "short_name": "Away Team Goals",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "6501252620": {
+              "id": "6501252620",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "1.833",
+              "suspend": "0",
+              "handicap": "1.5"
+            },
+            "6501252621": {
+              "id": "6501252621",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.833",
+              "suspend": "0",
+              "handicap": "1.5"
+            },
+            "6501252622": {
+              "id": "6501252622",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "5",
+              "suspend": "0",
+              "handicap": "2.5"
+            },
+            "6501252623": {
+              "id": "6501252623",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.142",
+              "suspend": "0",
+              "handicap": "2.5"
+            }
+          }
+        },
+        "11": {
+          "id": 11,
+          "name": "3-Way Handicap",
+          "short_name": "3-Way Handicap",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "65012526110": {
+              "id": "65012526110",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.09",
+              "suspend": "0",
+              "handicap": "2",
+              "is_main": "0"
+            },
+            "65012526111": {
+              "id": "65012526111",
+              "name": "Draw",
+              "short_name": "Draw",
+              "value_eu": "9",
+              "suspend": "0",
+              "handicap": "-2",
+              "is_main": "0"
+            },
+            "65012526112": {
+              "id": "65012526112",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "21",
+              "suspend": "0",
+              "handicap": "-2",
+              "is_main": "0"
+            },
+            "65012526113": {
+              "id": "65012526113",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.5",
+              "suspend": "0",
+              "handicap": "1",
+              "is_main": "1"
+            },
+            "65012526114": {
+              "id": "65012526114",
+              "name": "Draw",
+              "short_name": "Draw",
+              "value_eu": "3.4",
+              "suspend": "0",
+              "handicap": "-1",
+              "is_main": "1"
+            },
+            "65012526115": {
+              "id": "65012526115",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "6.5",
+              "suspend": "0",
+              "handicap": "-1",
+              "is_main": "1"
+            }
+          }
+        },
+        "12": {
+          "id": 12,
+          "name": "Asian Handicap",
+          "short_name": "Asian Handicap",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "65012526120": {
+              "id": "65012526120",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.825",
+              "suspend": "0",
+              "handicap": "0.25",
+              "is_main": "1"
+            },
+            "65012526121": {
+              "id": "65012526121",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "1.975",
+              "suspend": "0",
+              "handicap": "-0.25",
+              "is_main": "1"
+            },
+            "65012526122": {
+              "id": "65012526122",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.325",
+              "suspend": "0",
+              "handicap": "0.75",
+              "is_main": "0"
+            },
+            "65012526123": {
+              "id": "65012526123",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "3.075",
+              "suspend": "0",
+              "handicap": "-0.75",
+              "is_main": "0"
+            }
+          }
+        }
+      }
+    },
+    "65012721": {
+      "core": {
+        "safe": "",
+        "removed": "",
+        "stopped": "0",
+        "blocked": "0",
+        "finished": "0",
+        "updated": "14.09.2021 11:23:51",
+        "updated_ts": "1631618631941"
+      },
+      "info": {
+        "id": "65012721",
+        "mid": "5062898",
+        "bet365id": "107929334",
+        "name": "Viborg FF Reserves vs AaB Reserves",
+        "sport": "soccer",
+        "league": "Denmark Reserve League",
+        "start_time": "12:00",
+        "start_date": "14.09.2021",
+        "start_ts": "1631620800",
+        "period": "1st Half",
+        "score": "0:1",
+        "ball_pos": "",
+        "state_info": ",6",
+        "state": "21936",
+        "minute": "24",
+        "seconds": "24:24"
+      },
+      "team_info": {
+        "home": {
+          "name": "Viborg FF Reserves",
+          "score": "0",
+          "color": "",
+          "kit_color": "#F0F0F0,#025C17",
+          "Serve": ""
+        },
+        "away": {
+          "name": "AaB Reserves",
+          "score": "1",
+          "color": "",
+          "kit_color": "#0A0A0A,#0A0A0A,#0A0A0A,#888888",
+          "Serve": ""
+        }
+      },
+      "bonus": {},
+      "stream": "",
+      "stats": {
+        "0": {
+          "name": "ITeam",
+          "home": "Viborg FF Reserves",
+          "away": "AaB Reserves"
+        },
+        "1": {
+          "name": "IGoal",
+          "home": "0",
+          "away": "1"
+        },
+        "2": {
+          "name": "ICorner",
+          "home": "0",
+          "away": "0"
+        },
+        "3": {
+          "name": "IYellowCard",
+          "home": "0",
+          "away": "1"
+        },
+        "4": {
+          "name": "IRedCard",
+          "home": "0",
+          "away": "0"
+        },
+        "5": {
+          "name": "IThrowIn",
+          "home": "0",
+          "away": "0"
+        },
+        "6": {
+          "name": "IFreeKick",
+          "home": "0",
+          "away": "0"
+        },
+        "7": {
+          "name": "IGoalKick",
+          "home": "0",
+          "away": "0"
+        },
+        "8": {
+          "name": "IPenalty",
+          "home": "0",
+          "away": "0"
+        },
+        "9": {
+          "name": "ISubstitution",
+          "home": "0",
+          "away": "0"
+        },
+        "10": {
+          "name": "IAttacks",
+          "home": "19",
+          "away": "16"
+        },
+        "11": {
+          "name": "IDangerousAttacks",
+          "home": "8",
+          "away": "8"
+        },
+        "12": {
+          "name": "IOnTarget",
+          "home": "3",
+          "away": "2"
+        },
+        "13": {
+          "name": "IOffTarget",
+          "home": "0",
+          "away": "0"
+        },
+        "14": {
+          "name": "IPosession",
+          "home": "49",
+          "away": "51"
+        }
+      },
+      "extra": {
+        "0": {
+          "code": "255",
+          "minute": "18",
+          "value": "18' - 1st Goal -   (AaB Reserves) - "
+        },
+        "1": {
+          "code": "253",
+          "minute": "23",
+          "value": "23' - 1st Yellow Card -  (AaB Reserves)"
+        }
+      },
+      "history": {},
+      "odds": {
+        "1": {
+          "id": 1,
+          "name": "Home Team Goals",
+          "short_name": "Home Team Goals",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "6501272110": {
+              "id": "6501272110",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "15",
+              "suspend": "0",
+              "handicap": "4.5"
+            },
+            "6501272111": {
+              "id": "6501272111",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.01",
+              "suspend": "0",
+              "handicap": "4.5"
+            },
+            "6501272112": {
+              "id": "6501272112",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "2.2",
+              "suspend": "0",
+              "handicap": "1.5"
+            },
+            "6501272113": {
+              "id": "6501272113",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.615",
+              "suspend": "0",
+              "handicap": "1.5"
+            }
+          }
+        },
+        "2": {
+          "id": 2,
+          "name": "Away Team Goals",
+          "short_name": "Away Team Goals",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "6501272120": {
+              "id": "6501272120",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "2.5",
+              "suspend": "0",
+              "handicap": "2.5"
+            },
+            "6501272121": {
+              "id": "6501272121",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.5",
+              "suspend": "0",
+              "handicap": "2.5"
+            },
+            "6501272122": {
+              "id": "6501272122",
+              "name": "Over",
+              "short_name": "Over",
+              "value_eu": "9",
+              "suspend": "0",
+              "handicap": "4.5"
+            },
+            "6501272123": {
+              "id": "6501272123",
+              "name": "Under",
+              "short_name": "Under",
+              "value_eu": "1.04",
+              "suspend": "0",
+              "handicap": "4.5"
+            }
+          }
+        },
+        "11": {
+          "id": 11,
+          "name": "3-Way Handicap",
+          "short_name": "3-Way Handicap",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "65012721110": {
+              "id": "65012721110",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.142",
+              "suspend": "0",
+              "handicap": "3",
+              "is_main": "0"
+            },
+            "65012721111": {
+              "id": "65012721111",
+              "name": "Draw",
+              "short_name": "Draw",
+              "value_eu": "7.5",
+              "suspend": "0",
+              "handicap": "-3",
+              "is_main": "0"
+            },
+            "65012721112": {
+              "id": "65012721112",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "10",
+              "suspend": "0",
+              "handicap": "-3",
+              "is_main": "0"
+            },
+            "65012721113": {
+              "id": "65012721113",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "2.25",
+              "suspend": "0",
+              "handicap": "1",
+              "is_main": "1"
+            },
+            "65012721114": {
+              "id": "65012721114",
+              "name": "Draw",
+              "short_name": "Draw",
+              "value_eu": "3.6",
+              "suspend": "0",
+              "handicap": "-1",
+              "is_main": "1"
+            },
+            "65012721115": {
+              "id": "65012721115",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "2.5",
+              "suspend": "0",
+              "handicap": "-1",
+              "is_main": "1"
+            }
+          }
+        },
+        "12": {
+          "id": 12,
+          "name": "Asian Handicap",
+          "short_name": "Asian Handicap",
+          "suspend": "0",
+          "order": "",
+          "participants": {
+            "65012721120": {
+              "id": "65012721120",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "1.475",
+              "suspend": "0",
+              "handicap": "1.5",
+              "is_main": "0"
+            },
+            "65012721121": {
+              "id": "65012721121",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "2.475",
+              "suspend": "0",
+              "handicap": "-1.5",
+              "is_main": "0"
+            },
+            "65012721122": {
+              "id": "65012721122",
+              "name": "Home",
+              "short_name": "Home",
+              "value_eu": "2.25",
+              "suspend": "0",
+              "handicap": "0.5",
+              "is_main": "0"
+            },
+            "65012721123": {
+              "id": "65012721123",
+              "name": "Away",
+              "short_name": "Away",
+              "value_eu": "1.575",
+              "suspend": "0",
+              "handicap": "-0.5",
+              "is_main": "0"
+            }
+          }
+        }
+      }
+    }
+  }
+}
