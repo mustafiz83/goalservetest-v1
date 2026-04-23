@@ -95,8 +95,8 @@ def process_api_response(data: Dict[str, Any]):
             league_id = info.get("league_id")
             name = info.get("name")
             safe_name = re.sub(r'\W+', '_', name)
-            if(league_id != "70"):
-                continue
+            # if(league_id != "70"):
+            #     continue
             # 1. Create the new snapshot from the event's 'info' data
             snapshot = {
                 # "timestamp": datetime.now().isoformat(),
