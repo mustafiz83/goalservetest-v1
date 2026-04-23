@@ -391,6 +391,12 @@ class GoalserveWSClient:
         self._last_message_at: Optional[datetime] = None
         self._reconnect_attempts = 0
         self._token_manager = token_manager
+        self._last_broadcast_payload: Optional[str] = None
+
+    @property
+    def last_broadcast_payload(self) -> Optional[str]:
+        """Most recent parsed upstream frame (JSON string), for new client handoff."""
+        return self._last_broadcast_payload
 
     def start(self) -> None:
         if self._task and not self._task.done():
@@ -464,8 +470,10 @@ class GoalserveWSClient:
                 if parsed is None:
                     continue
 
+                payload = json.dumps(parsed)
+                self._last_broadcast_payload = payload
                 if self._manager.client_count > 0:
-                    await self._manager.broadcast(json.dumps(parsed))
+                    await self._manager.broadcast(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -512,6 +520,12 @@ class SoccerWSService:
     async def handle_client(self, ws: WebSocket) -> None:
         """Accept a client WebSocket and keep it alive; messages are pushed via broadcast."""
         await self.manager.connect(ws)
+        last = self._client.last_broadcast_payload
+        if last:
+            try:
+                await ws.send_text(last)
+            except Exception:
+                pass
         try:
             while True:
                 await ws.receive_text()

@@ -7,7 +7,8 @@ from app.api.endpoints import router as api_router
 from app.api.live_endpoints import router as football_live_router
 from app.api.today_result_endpoint import router as today_result
 from app.api.ws_endpoints import router as ws_router
-from app.services.inplay_service import *
+from app.services.inplay_service import start_scheduler, stop_scheduler
+from app.services.ws_soccer_service import soccer_ws_service
 
 app = FastAPI()
 
@@ -95,8 +96,10 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     start_scheduler()
+    soccer_ws_service.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     stop_scheduler()
+    await soccer_ws_service.stop()

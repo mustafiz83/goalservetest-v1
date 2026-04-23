@@ -21,11 +21,6 @@ scheduler_thread: Optional[threading.Thread] = None
 INTERVAL_SECONDS = 1 # The scheduler interval (1 seconds requested by the user)
 INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB # Set to False to disable the scheduler completely
 
-# API Configuration
-# NOTE: Replace 'YOUR_API_KEY_HERE' with your actual Goalserve API key if needed.
-GOALSERVE_API_URL = "http://inplay.goalserve.com/inplay-soccer.gz" 
-API_KEY = "YOUR_API_KEY_HERE" 
-
 # --- Core Data Fetching and Processing Functions ---
 
 def fetch_and_decompress_data(api_url: str) -> Optional[Dict[str, Any]]:
@@ -150,7 +145,7 @@ def fetch_and_process_data():
     """
     The main job function executed by the scheduler.
     """
-    data_content = fetch_and_decompress_data(GOALSERVE_API_URL)
+    data_content = fetch_and_decompress_data(settings.inplay_soccer_feed_url)
 
     if isinstance(data_content, dict):
         print("\n--- Starting Data Processing ---")

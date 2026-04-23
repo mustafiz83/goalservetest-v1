@@ -421,7 +421,7 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
     ball_pos = None
     inplay_event_id = None
     try:
-        r = requests.get("http://inplay.goalserve.com/inplay-soccer.gz", timeout=5, stream=True)
+        r = requests.get(settings.inplay_soccer_feed_url, timeout=5, stream=True)
         r.raise_for_status()
         try:
             raw = gzip.decompress(r.content).decode("utf-8")
