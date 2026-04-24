@@ -66,12 +66,12 @@ async def home(request: Request):
     default_match_id = "3838001" 
     
     return templates.TemplateResponse(
-        "index.html", 
+        request,
+        "index.html",
         {
-            "request": request,
             "default_league_id": default_league_id,
-            "default_match_id": default_match_id
-        }
+            "default_match_id": default_match_id,
+        },
     )
 
 from fastapi.responses import FileResponse

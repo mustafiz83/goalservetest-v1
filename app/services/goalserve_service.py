@@ -13,6 +13,28 @@ REQUEST_TIMEOUT = 30
 LEAGUE_DATA_CACHE: Dict[str, Dict[str, Any]] = {}
 FIXTURES_CACHE: Dict[str, List[Dict[str, Any]]] = {} # Cache for fixtures
 
+
+def _norm_match_id(value: Any) -> str:
+    """Normalize IDs: path params are str; Goalserve JSON may use int or str for @id / mid."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _extract_tournament_root(data: Dict[str, Any]) -> Dict[str, Any]:
+    """soccerhistory → results.tournament; soccerfixtures JSON often uses fixtures.tournament."""
+    if not isinstance(data, dict):
+        return {}
+    for top in ("results", "fixtures"):
+        block = data.get(top)
+        if isinstance(block, dict):
+            tour = block.get("tournament")
+            if isinstance(tour, dict):
+                return tour
+    tour = data.get("tournament")
+    return tour if isinstance(tour, dict) else {}
+
+
 # --- Helper functions (kept outside of API fetch for readability) ---
 
 def parse_heatmap_string(heatmap_string: str) -> List[Dict[str, Any]]:
@@ -149,8 +171,7 @@ async def fetch_fixtures(league_id: str, season: str | None = None) -> Dict[str,
         response.raise_for_status()
         data = response.json()
 
-        # The data structure changes slightly for soccerhistory: results -> tournament -> week
-        tournament = data.get('results', {}).get('tournament', {})
+        tournament = _extract_tournament_root(data)
         
         league_name = tournament.get('@league', 'Unknown League')
         
@@ -173,7 +194,7 @@ async def fetch_fixtures(league_id: str, season: str | None = None) -> Dict[str,
                 matches = [matches]
 
             for match in matches:
-                match_id = match.get('@id')
+                match_id = _norm_match_id(match.get('@id'))
                 localteam = match.get('localteam', {})
                 visitorteam = match.get('visitorteam', {})
                 
@@ -212,18 +233,35 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
     """Fetches and combines heatmap data with player/team names and match details."""
 
     print("fetch_and_process_heatmap ")
-    
+    mid = _norm_match_id(match_id)
+
     # 1. Fetch League Data (for names)
     league_details = fetch_league_data(league_id)
     if 'error' in league_details:
         return league_details
         
     # Get the specific match details from the fixtures list for metadata consistency
-    fixtures_response = await fetch_fixtures(league_id, season) 
-    target_fixture = next((f for f in fixtures_response.get('fixtures', []) if f['match_id'] == match_id), None)
-    
+    fixtures_response = await fetch_fixtures(league_id, season)
+    if "error" in fixtures_response:
+        return fixtures_response
+
+    target_fixture = next(
+        (
+            f
+            for f in fixtures_response.get("fixtures", [])
+            if _norm_match_id(f.get("match_id")) == mid
+        ),
+        None,
+    )
+
     if not target_fixture:
-         return {"error": f"Match ID {match_id} not found in the fixtures feed for League {league_id}."}
+        return {
+            "error": (
+                f"Match ID {match_id} not found in the fixtures feed for league {league_id}"
+                f"{f' (season {season})' if season else ''}. "
+                "Check the match id, league id, and season string (e.g. 2025-2026 vs what Goalserve lists in soccerfixtures/data/seasons)."
+            )
+        }
 
     # 2. Fetch Heatmap Data 
     # NOTE: The heatmap feed URL typically uses the league ID and is NOT season-specific in the URL itself.
@@ -239,7 +277,7 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
         matches = tournament.get('match')
         if not isinstance(matches, list):
             matches = [matches]
-        target_match = next((m for m in matches if m.get('@id') == match_id), None)
+        target_match = next((m for m in matches if _norm_match_id(m.get("@id")) == mid), None)
 
         if not target_match:
             # Heatmap data not available for this match
@@ -273,7 +311,7 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
             return enriched
 
         return {
-            "match_id": match_id,
+            "match_id": mid,
             "match_date": target_fixture['date'],
             "league_name": league_details['league_name'],
             "localteam_name": target_fixture['localteam_name'],
@@ -345,6 +383,8 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
     """
     import gzip, io
 
+    mid = _norm_match_id(match_id)
+
     # 1. Fetch commentary data (lineups + live stats)
     commentary_url = f"{BASE_URL}{API_KEY}/commentaries/{league_id}.xml?json=1"
     heatmap_url    = f"{BASE_URL}{API_KEY}/commentaries/{league_id}_heatmap.xml?json=1"
@@ -362,13 +402,13 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
         if not isinstance(matches, list):
             matches = [matches] if matches else []
 
-        target = next((m for m in matches if m.get("@id") == match_id), None)
+        target = next((m for m in matches if _norm_match_id(m.get("@id")) == mid), None)
 
         if target:
             local_node   = target.get("localteam", {})
             visitor_node = target.get("visitorteam", {})
             lineup_data = {
-                "match_id":    match_id,
+                "match_id":    mid,
                 "status":      target.get("@status"),
                 "minute":      target.get("@minute"),
                 "score":       target.get("@score"),
@@ -389,7 +429,7 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
         if not isinstance(matches, list):
             matches = [matches] if matches else []
 
-        target = next((m for m in matches if m.get("@id") == match_id), None)
+        target = next((m for m in matches if _norm_match_id(m.get("@id")) == mid), None)
 
         if target:
             heatmaps_node = target.get("heatmaps", {})
@@ -431,7 +471,7 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
 
         for eid, event in (inplay_json.get("events") or {}).items():
             info = event.get("info") or {}
-            if info.get("mid") == match_id:
+            if _norm_match_id(info.get("mid")) == mid:
                 ball_pos = info.get("ball_pos")
                 inplay_event_id = eid
                 break
@@ -439,7 +479,7 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
         pass  # ball_pos stays None — inplay not available or match not live
 
     return {
-        "match_id":       match_id,
+        "match_id":       mid,
         "league_id":      league_id,
         "lineup":         lineup_data,
         "player_heatmap": heatmap_data,

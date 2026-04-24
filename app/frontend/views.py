@@ -9,9 +9,8 @@ async def serve_heatmap_page(request: Request):
     """Serves the main HTML page with the football field visualization."""
     # You would typically populate context variables here, like a list of matches
     context = {
-        "request": request,
         "title": "Soccer Player Heatmap",
         "default_league_id": "1204",  # UEFA Champions League
-        "default_match_id": "3838001" # Example Match ID
+        "default_match_id": "3838001",  # Example Match ID
     }
-    return templates.TemplateResponse("index.html", context)
+    return templates.TemplateResponse(request, "index.html", context)
