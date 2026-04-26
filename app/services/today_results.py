@@ -2,6 +2,7 @@ import httpx
 import os
 import re
 from typing import Dict, List, Any, Optional
+from app.core.config import settings
 
 GOALSERVE_API_KEY = os.getenv("GOALSERVE_API_KEY", "your_api_key_here")
 BASE_URL = "http://www.goalserve.com/getfeed"
@@ -31,7 +32,7 @@ class TodayResultService:
                 # Using 'home' endpoint to get all matches for the day, including scheduled ones.
                 url = f"{BASE_URL}/{GOALSERVE_API_KEY}/soccernew/home?json=1"
                 print(url)
-                response = await client.get(url, timeout=15.0)
+                response = await client.get(url, timeout=settings.GOALSERVE_LIVE_TIMEOUT_SECONDS)
                 response.raise_for_status()
                 
                 data = response.json()

@@ -18,7 +18,8 @@ STOP_SCHEDULER_FLAG = threading.Event()
 scheduler_thread: Optional[threading.Thread] = None
 
 # Job Configuration
-INTERVAL_SECONDS = 1 # The scheduler interval (1 seconds requested by the user)
+INTERVAL_SECONDS = max(1, settings.INPLAY_SCHEDULER_INTERVAL_SECONDS)
+LOOP_SLEEP_SECONDS = max(0.1, settings.SCHEDULER_LOOP_SLEEP_SECONDS)
 INPLAY_SCHEDULER_JOB = settings.INPLAY_SCHEDULER_JOB # Set to False to disable the scheduler completely
 
 # --- Core Data Fetching and Processing Functions ---
@@ -31,7 +32,7 @@ def fetch_and_decompress_data(api_url: str) -> Optional[Dict[str, Any]]:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Requesting Goalserve content...")
     
     try:
-        response = requests.get(api_url, timeout=2)
+        response = requests.get(api_url, timeout=settings.GOALSERVE_INPLAY_SCHEDULER_TIMEOUT_SECONDS)
         response.raise_for_status()
 
         # 1. ATTEMPT DECOMPRESSION (Original GZIP logic)
@@ -167,7 +168,7 @@ def run_continuously():
     
     while not STOP_SCHEDULER_FLAG.is_set():
         schedule.run_pending()
-        time.sleep(1) # Prevents high CPU usage
+        time.sleep(LOOP_SLEEP_SECONDS) # Prevents high CPU usage
         
     print("Scheduler: Thread gracefully stopped.")
 

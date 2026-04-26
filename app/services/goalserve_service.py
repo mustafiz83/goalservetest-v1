@@ -8,7 +8,7 @@ import json # Used for error printing/debugging
 # 🚨 IMPORTANT: Replace "YOUR_API_KEY" with your actual Goalserve API key
 API_KEY = settings.GOALSERVE_API_KEY
 BASE_URL = "https://www.goalserve.com/getfeed/" 
-REQUEST_TIMEOUT = 30 
+REQUEST_TIMEOUT = settings.GOALSERVE_REQUEST_TIMEOUT_SECONDS
 
 LEAGUE_DATA_CACHE: Dict[str, Dict[str, Any]] = {}
 FIXTURES_CACHE: Dict[str, List[Dict[str, Any]]] = {} # Cache for fixtures
@@ -461,7 +461,7 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
     ball_pos = None
     inplay_event_id = None
     try:
-        r = requests.get(settings.inplay_soccer_feed_url, timeout=5, stream=True)
+        r = requests.get(settings.inplay_soccer_feed_url, timeout=settings.GOALSERVE_INPLAY_TIMEOUT_SECONDS, stream=True)
         r.raise_for_status()
         try:
             raw = gzip.decompress(r.content).decode("utf-8")

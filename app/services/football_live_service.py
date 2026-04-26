@@ -2,6 +2,7 @@ import httpx
 import os
 import re
 from typing import Dict, List, Any
+from app.core.config import settings
 
 # Note: The datetime import is not currently used in the provided code, but kept for completeness.
 # from datetime import datetime
@@ -19,7 +20,7 @@ class FootballLiveService:
             async with httpx.AsyncClient() as client:
                 url = f"{BASE_URL}/{GOALSERVE_API_KEY}/soccernew/live?json=1"
                 # print(url)
-                response = await client.get(url, timeout=15.0)
+                response = await client.get(url, timeout=settings.GOALSERVE_LIVE_TIMEOUT_SECONDS)
                 response.raise_for_status()
                 
                 data = response.json()

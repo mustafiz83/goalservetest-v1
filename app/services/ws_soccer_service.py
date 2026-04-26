@@ -129,7 +129,7 @@ class TokenManager:
 
     async def _fetch(self) -> None:
         logger.info("ws_soccer: fetching new auth token …")
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=settings.GOALSERVE_WS_AUTH_TIMEOUT_SECONDS) as client:
             resp = await client.post(
                 settings.GOALSERVE_WS_AUTH_URL,
                 json={"apiKey": settings.GOALSERVE_API_KEY},
