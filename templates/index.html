@@ -36,7 +36,20 @@
             text-align: center; 
             margin-bottom: 10px; /* Space between inputs and buttons on mobile */
         }
-        .controls select { min-width: 300px; width: auto; }
+        .controls select { min-width: 220px; width: auto; max-width: 100%; }
+        .heatmap-hint {
+            font-size: 0.85em;
+            color: #9ca3af;
+            margin: 8px 0 0;
+            line-height: 1.4;
+        }
+        .checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #e0e0e0;
+            font-weight: 600;
+        }
         .controls button {
             background-color: #4CAF50; 
             color: white; 
@@ -183,17 +196,25 @@
     <h1>⚽ Player Heatmap Visualization</h1>
     
     <div class="controls">
-        <label for="leagueId">League ID:</label>
-        <input type="text" id="leagueId" value="{{ default_league_id }}">
-        
-        <label for="seasonInput">Season (YYYY-YYYY):</label>
-        <input type="text" id="seasonInput" value="2023-2024" placeholder="e.g., 2023-2024"> 
+        <label for="leagueSelect">League:</label>
+        <select id="leagueSelect" aria-label="League with heatmap feed"></select>
 
-        <button onclick="loadFixtures()">Load Fixtures</button>
-        <br><br>
-        <label for="fixture-select">Select Match:</label>
+        <label for="seasonSelect">Season:</label>
+        <select id="seasonSelect" aria-label="Goalserve season token">
+            <option value="">Current season</option>
+        </select>
+
+        <label class="checkbox-label">
+            <input type="checkbox" id="heatmapOnlyFixtures" checked>
+            Only matches with live heatmap
+        </label>
+
+        <button type="button" id="loadFixturesBtn">Load Fixtures</button>
+        <p id="heatmap-hint" class="heatmap-hint"></p>
+        <br>
+        <label for="fixture-select">Match (live heatmap only):</label>
         <select id="fixture-select" onchange="loadHeatmapFromFixture()">
-            <option value="">-- Load League Fixtures Above --</option>
+            <option value="">-- Load fixtures above --</option>
         </select>
         <input type="hidden" id="matchId" value="{{ default_match_id }}">
     </div>
@@ -228,8 +249,8 @@
     <script src="{{ url_for('static', path='/js/heatmap_viz.js') }}"></script>
     
     <script>
-        // Start by loading fixtures for the default League ID and Season on page load
-        document.addEventListener('DOMContentLoaded', loadFixtures);
+        window.HEATMAP_DEFAULT_LEAGUE = "{{ default_league_id }}";
+        document.addEventListener('DOMContentLoaded', initHeatmapPage);
     </script>
     <script src="/static/js/topnav.js"></script>
 </body>

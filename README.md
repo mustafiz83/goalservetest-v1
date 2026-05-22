@@ -47,6 +47,7 @@ These return static or templated pages, not JSON.
 | `GET` | `/` | Home: `index.html` (heatmap / match UI; default league & match ids in template context). |
 | `GET` | `/live` | Live stats dashboard: `templates/live_stats.html`. |
 | `GET` | `/today` | Today’s results page: `templates/today_result.html`. |
+| `GET` | `/leagues` | League catalog UI: mapping ids, heatmap ids, seasons. |
 | `GET` | `/static/...` | Static assets under the `static/` folder. |
 
 ---
@@ -55,12 +56,19 @@ These return static or templated pages, not JSON.
 
 All paths below are relative to your host (e.g. `http://localhost:8000`).
 
+### Leagues (mapping + seasons)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/leagues` | Leagues from mapping + seasons. Query: `q`, `country`, `live_only`, `heatmap_only`, `sort` (`default`/`live`/`heatmap`/`next_match`), `page`, `per_page`. |
+| `GET` | `/api/v1/leagues/{league_id}` | Single league row (ids, seasons, heatmap feed path). |
+
 ### Fixtures
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/fixtures/{league_id}` | Fixtures for a league. |
-| `GET` | `/api/v1/fixtures/{league_id}/{season}` | Same, with season (e.g. historical). |
+| `GET` | `/api/v1/fixtures/{league_id}` | Current season — `soccerfixtures/leagueid/{id}`. |
+| `GET` | `/api/v1/fixtures/{league_id}/{season}` | Historical when available — `soccerhistory/leagueid/{id}-{season}`; season token must match `/leagues` (e.g. `2025` not `2025-2026` for some leagues). Falls back to current feed on error. |
 
 ### Match positions, heatmap, estimates
 

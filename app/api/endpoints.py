@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from app.services.goalserve_service import fetch_and_process_heatmap, fetch_fixtures, fetch_match_positions
 from app.services.position_estimation_service import estimate_player_positions
@@ -131,13 +133,19 @@ async def get_match_heatmap(league_id: str, match_id: str, season: str | None = 
     data = await fetch_and_process_heatmap(match_id, league_id, season) # Pass season
     print("After fetch")
     if "error" in data:
-        # Determine appropriate status code based on error message
-        print("error in endpoints")
         error_msg = data["error"].lower()
-        print(error_msg)
-        status_code = 404 if "not found" in error_msg or "not yet available" in error_msg else 500
-        raise HTTPException(status_code=status_code, detail=data["error"])
-        
+        status_code = 404 if (
+            "not found" in error_msg
+            or "not yet available" in error_msg
+            or "no live heatmap" in error_msg
+            or "left the live" in error_msg
+        ) else 500
+        detail: Any = {
+            "message": data["error"],
+            "heatmap_live_match_ids": data.get("heatmap_live_match_ids", []),
+        }
+        raise HTTPException(status_code=status_code, detail=detail)
+
     return data
 
 

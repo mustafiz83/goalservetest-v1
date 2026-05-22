@@ -1,0 +1,39 @@
+
+Soccer live stats - live match statistics and lineups
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerfixtures/data/mapping?json=1 - leagues ids list
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerleague/1204?json=1 - teams/players by leagueID
+
+Soccer profiles/stats:
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerstats/team/9260?json=1
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerstats/player/193?json=1
+
+Live game text commentary
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1322-text.xml?json=1
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1204-text.xml?json=1
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1205-text.xml?json=1
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1399-text.xml?json=1
+
+
+
+Predicted lineups (1-2 days in advance)
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1005_predicted.xml?json=1
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1007_predicted.xml?json=1
+
+Live game players heat map (available for top leagues only - check heatmap attribute in "/soccernew/home" feed)
+
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1005_heatmap.xml?json=1
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/commentaries/1204_heatmap.xml?json=1
+
+
+
+
+fixtures by league ID
+
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerfixtures/leagueid/1204?json=1
+
+
+https://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccerhistory/leagueid/1204-2009-2010?json=1   - fixtures by league ID
+
+
+live
+http://www.goalserve.com/getfeed/3e3637e299624a2326be08de2038dca3/soccernew/live

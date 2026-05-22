@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>League Catalog — Goalserve</title>
+    <link rel="stylesheet" href="/static/css/nav.css">
+    <link rel="stylesheet" href="/static/css/leagues.css">
+</head>
+<body>
+    <div id="top-nav-container"></div>
+
+    <div class="page">
+        <header class="page-header">
+            <h1>League catalog</h1>
+            <p class="subtitle">
+                Goalserve <code>soccerfixtures/data/mapping</code> + <code>data/seasons</code>.
+                Heatmap leagues use the same id: <code>commentaries/{id}_heatmap.xml</code>.
+                <strong>Next match(es)</strong> come from the current <code>soccerfixtures/leagueid</code> feed (up to 2 per row).
+            </p>
+        </header>
+
+        <div class="filter-bar" role="group" aria-label="League filters and sort">
+            <button type="button" class="filter-btn" id="btnLiveOnly" data-toggle="live_only" aria-pressed="false" title="Only leagues with a live match now">Live</button>
+            <button type="button" class="filter-btn" id="btnHeatmapOnly" data-toggle="heatmap_only" aria-pressed="false" title="Only leagues with heatmap feed">Heatmap</button>
+            <button type="button" class="filter-btn" id="btnSortNextMatch" data-sort="next_match" aria-pressed="false" title="Sort by earliest next kickoff (slower)">Next match · time</button>
+        </div>
+
+        <div class="toolbar">
+            <input type="search" id="searchInput" placeholder="Search name, country, or league id…" autocomplete="off">
+            <select id="countryFilter" aria-label="Filter by country">
+                <option value="">All countries</option>
+            </select>
+            <label class="per-page-label" for="perPageSelect">Per page</label>
+            <select id="perPageSelect" aria-label="Rows per page">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+            <button type="button" id="refreshBtn" class="btn btn-primary">Refresh</button>
+            <span id="statsLine" class="stats-line">Loading…</span>
+        </div>
+
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading leagues from Goalserve…</p>
+            </div>
+        </div>
+
+        <div id="pagination" class="pagination" hidden></div>
+    </div>
+
+    <script src="/static/js/leagues.js"></script>
+    <script src="/static/js/topnav.js"></script>
+</body>
+</html>
