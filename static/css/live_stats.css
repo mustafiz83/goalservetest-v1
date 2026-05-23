@@ -413,6 +413,21 @@ body {
     font-size: 1.1em;
 }
 
+.btn-retry {
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+
+.btn-retry:hover {
+    background: #2563eb;
+}
+
 .error {
     background: rgba(239, 68, 68, 0.1);
     border: 2px solid #ef4444;

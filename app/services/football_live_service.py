@@ -1,44 +1,49 @@
-import httpx
-import os
 import re
-from typing import Dict, List, Any
-from app.core.config import settings
+from typing import Any, Dict, List
 
-# Note: The datetime import is not currently used in the provided code, but kept for completeness.
-# from datetime import datetime
+from app.services.goalserve_http_cache import (
+    GoalserveHttpError,
+    fetch_goalserve_json_async,
+)
 
-GOALSERVE_API_KEY = os.getenv("GOALSERVE_API_KEY", "your_api_key_here")
-BASE_URL = "http://www.goalserve.com/getfeed"
+_PARSED_LIVE_CACHE: Dict[str, Any] = {"payload": None, "from_cache": False}
+
 
 class FootballLiveService:
     """Service for fetching and processing live football match data"""
     
     @staticmethod
-    async def get_live_matches() -> Dict[str, Any]:
-        """Fetch all live football matches"""
+    async def get_live_matches(force_refresh: bool = False) -> Dict[str, Any]:
+        """Fetch all live football matches from ``soccernew/live`` (20s HTTP cache)."""
+        stale = _PARSED_LIVE_CACHE.get("payload")
         try:
-            async with httpx.AsyncClient() as client:
-                url = f"{BASE_URL}/{GOALSERVE_API_KEY}/soccernew/live?json=1"
-                # print(url)
-                response = await client.get(url, timeout=settings.GOALSERVE_LIVE_TIMEOUT_SECONDS)
-                response.raise_for_status()
-                
-                data = response.json()
-                matches = FootballLiveService._parse_live_matches(data)
-                print(f"Total Matches Parsed: {len(matches)}")
-                return {
-                    "status": "success",
-                    # Safely access the updated timestamp
-                    "updated": data.get("scores", {}).get("@updated"),
-                    "matches": matches
-                }
-        except Exception as e:
-            # Catch HTTPX errors, JSON decoding errors, etc.
-            return {
-                "status": "error",
-                "message": str(e),
-                "matches": []
+            data, from_cache = await fetch_goalserve_json_async(
+                "soccernew/live",
+                force_refresh=force_refresh,
+            )
+            matches = FootballLiveService._parse_live_matches(data)
+            payload = {
+                "status": "success",
+                "updated": data.get("scores", {}).get("@updated"),
+                "matches": matches,
+                "from_cache": from_cache,
             }
+            _PARSED_LIVE_CACHE["payload"] = payload
+            return payload
+        except GoalserveHttpError as e:
+            if stale:
+                out = dict(stale)
+                out["stale"] = True
+                out["warning"] = str(e)
+                return out
+            return {"status": "error", "message": str(e), "matches": []}
+        except Exception as e:
+            if stale:
+                out = dict(stale)
+                out["stale"] = True
+                out["warning"] = str(e)
+                return out
+            return {"status": "error", "message": str(e), "matches": []}
     
     @staticmethod
     def _parse_live_matches(data: Dict[str, Any]) -> List[Dict[str, Any]]:

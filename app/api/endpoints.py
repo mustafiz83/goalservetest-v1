@@ -143,6 +143,7 @@ async def get_match_heatmap(league_id: str, match_id: str, season: str | None = 
         detail: Any = {
             "message": data["error"],
             "heatmap_live_match_ids": data.get("heatmap_live_match_ids", []),
+            "heatmap_live_matches": data.get("heatmap_live_matches", []),
         }
         raise HTTPException(status_code=status_code, detail=detail)
 

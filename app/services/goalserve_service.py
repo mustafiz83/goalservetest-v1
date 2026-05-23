@@ -1,10 +1,10 @@
 import re
-import time
 import requests
 from typing import Any, Dict, List, Optional, Set, Tuple
 import datetime 
 from collections import Counter # Use Counter for efficient frequency calculation
 from app.core.config import settings
+from app.services.goalserve_http_cache import GoalserveHttpError, fetch_goalserve_json
 import json # Used for error printing/debugging
 
 # 🚨 IMPORTANT: Replace "YOUR_API_KEY" with your actual Goalserve API key
@@ -14,11 +14,7 @@ REQUEST_TIMEOUT = settings.GOALSERVE_REQUEST_TIMEOUT_SECONDS
 
 LEAGUE_DATA_CACHE: Dict[str, Dict[str, Any]] = {}
 FIXTURES_CACHE: Dict[str, Dict[str, Any]] = {}  # cache_key -> fixtures payload
-_LIVE_HEATMAP_IDS_CACHE: Dict[str, Dict[str, Any]] = {}  # league_id -> {ids, loaded_at}
-_LIVE_HEATMAP_TTL = 30
-
-_NEXT_MATCHES_CACHE: Dict[str, Dict[str, Any]] = {}
-_NEXT_MATCHES_TTL = 900
+_FIXTURES_CACHE_VERSION = 2  # bump when payload shape changes
 _NEXT_MATCHES_FETCH_TIMEOUT = min(12, REQUEST_TIMEOUT)
 
 _FINISHED_STATUSES = frozenset(
@@ -103,18 +99,22 @@ def parse_heatmap_string(heatmap_string: str) -> List[Dict[str, Any]]:
         
     return data
 
-def process_team_heatmaps(team_heatmaps: Dict[str, Any]) -> Dict[str, Any]:
+def process_team_heatmaps(team_heatmaps: Any) -> Dict[str, Any]:
     """
     Processes the 'heatmaps' structure for a single team, reading the raw heatmap string 
     from the '@heatmap' attribute.
     """
+    if not isinstance(team_heatmaps, dict):
+        return {}
+
     player_map = {}
-    players = team_heatmaps.get('player', [])
+    players = team_heatmaps.get("player") or []
     if not isinstance(players, list):
-        # Handle case where only one player exists (comes as a dict)
-        players = [players] 
-        
+        players = [players] if players else []
+
     for player in players:
+        if not isinstance(player, dict):
+            continue
         player_id = player.get('@id')
         # CRITICAL FIX: Read the raw string from the '@heatmap' attribute
         raw_heatmap_string = player.get('@heatmap') 
@@ -130,50 +130,72 @@ def process_team_heatmaps(team_heatmaps: Dict[str, Any]) -> Dict[str, Any]:
 
 def fetch_league_data(league_id: str) -> Dict[str, Any]:
     """Fetches team and player names for a given league (with caching and robust parsing)."""
-    
-    if league_id in LEAGUE_DATA_CACHE:
-        return LEAGUE_DATA_CACHE[league_id]
+    lid = str(league_id).strip()
+    cached = LEAGUE_DATA_CACHE.get(lid)
+    if cached and isinstance(cached, dict) and "all_players" in cached:
+        return cached
+    if cached:
+        del LEAGUE_DATA_CACHE[lid]
 
-    url = f"{BASE_URL}{API_KEY}/soccerleague/{league_id}?json=1"
-    
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT) 
-        response.raise_for_status()
-        data = response.json()
-        
-        league_info = data.get('league', {})
+        data, _from_cache = fetch_goalserve_json(f"soccerleague/{lid}")
+
+        league_info = data.get("league") if isinstance(data, dict) else None
+        if not isinstance(league_info, dict):
+            league_info = {}
+
         details = {
-            'league_name': league_info.get('@name', 'Unknown League'),
-            'all_players': {}
+            "league_name": (league_info.get("@name") or "").strip() or "Unknown League",
+            "all_players": {},
         }
-        
-        teams = league_info.get('team', [])
+
+        teams = league_info.get("team") or []
         if not isinstance(teams, list):
-            teams = [teams]
-            
+            teams = [teams] if teams else []
+
         for team in teams:
-            squad = team.get('squad', {})
-            players = squad.get('player', [])
-            
+            if not isinstance(team, dict):
+                continue
+            squad = team.get("squad")
+            if not isinstance(squad, dict):
+                continue
+            players = squad.get("player") or []
             if not isinstance(players, list):
-                players = [players]
+                players = [players] if players else []
 
             for player in players:
-                player_id = player.get('@id')
-                player_name = player.get('@name') 
-                
-                if player_id: 
-                    details['all_players'][player_id] = player_name or f"Player ID {player_id}"
-                
-        LEAGUE_DATA_CACHE[league_id] = details 
+                if not isinstance(player, dict):
+                    continue
+                player_id = player.get("@id")
+                player_name = player.get("@name")
+
+                if player_id:
+                    details["all_players"][player_id] = player_name or f"Player ID {player_id}"
+
+        LEAGUE_DATA_CACHE[lid] = details
         return details
 
+    except GoalserveHttpError as e:
+        print(f"League data API Error: {e}")
+        return {
+            "league_name": f"League {lid}",
+            "all_players": {},
+            "roster_warning": f"Failed to fetch league data: {e}",
+        }
     except requests.exceptions.RequestException as e:
         print(f"League data API Error (Timeout={REQUEST_TIMEOUT}s): {e}")
-        return {"error": f"Failed to fetch league data: {e}"}
+        return {
+            "league_name": f"League {lid}",
+            "all_players": {},
+            "roster_warning": f"Failed to fetch league data: {e}",
+        }
     except Exception as e:
         print(f"Error processing Goalserve league data: {e}")
-        return {"error": f"Error processing Goalserve league data: {e}"}
+        return {
+            "league_name": f"League {lid}",
+            "all_players": {},
+            "roster_warning": f"Error processing Goalserve league data: {e}",
+        }
 
 
 def _league_season_names(league_id: str) -> List[str]:
@@ -246,34 +268,32 @@ def _resolve_soccerhistory_season(league_id: str, season: str) -> Optional[str]:
     return None
 
 
-def _fixtures_feed_urls(league_id: str, season: Optional[str]) -> Tuple[List[str], Dict[str, Any]]:
+def _fixtures_feed_paths(league_id: str, season: Optional[str]) -> Tuple[List[str], Dict[str, Any]]:
     """
-    Ordered URLs to try. Meta explains which feed is used (per goalserve-api-docs).
+    Ordered feed paths to try. Meta explains which feed is used (per goalserve-api-docs).
     """
     meta: Dict[str, Any] = {
         "season_requested": season,
         "season_resolved": None,
         "feed": "soccerfixtures",
     }
-    current_url = f"{BASE_URL}{API_KEY}/soccerfixtures/leagueid/{league_id}?json=1"
+    current_path = f"soccerfixtures/leagueid/{league_id}"
 
     if not season:
-        return [current_url], meta
+        return [current_path], meta
 
     history_token = _resolve_soccerhistory_season(league_id, season)
     if history_token:
         meta["season_resolved"] = history_token
         meta["feed"] = "soccerhistory"
-        history_url = (
-            f"{BASE_URL}{API_KEY}/soccerhistory/leagueid/{league_id}-{history_token}?json=1"
-        )
-        return [history_url, current_url], meta
+        history_path = f"soccerhistory/leagueid/{league_id}-{history_token}"
+        return [history_path, current_path], meta
 
     meta["note"] = (
         f"Season '{season}' not in Goalserve history list for league {league_id}; "
         "using current soccerfixtures feed."
     )
-    return [current_url], meta
+    return [current_path], meta
 
 
 def _fixture_week_nodes(tournament: Dict[str, Any]) -> List[Any]:
@@ -351,21 +371,37 @@ async def fetch_fixtures(league_id: str, season: str | None = None) -> Dict[str,
     season_norm = season.strip() if season else None
     cache_key = f"{league_id}-{season_norm}" if season_norm else league_id
     if cache_key in FIXTURES_CACHE:
-        payload = dict(FIXTURES_CACHE[cache_key])
-        fixtures = list(payload.get("fixtures") or [])
-        payload["fixtures"] = _annotate_fixtures_heatmap_availability(league_id, fixtures)
-        payload["heatmap_live_match_ids"] = sorted(fetch_live_heatmap_match_ids(league_id))
-        return payload
+        cached = FIXTURES_CACHE[cache_key]
+        if cached.get("_cache_v") == _FIXTURES_CACHE_VERSION:
+            payload = dict(cached)
+            fixtures = list(payload.get("fixtures") or [])
+            fixtures, live_rows = _annotate_fixtures_heatmap_availability(league_id, fixtures)
+            payload["fixtures"] = fixtures
+            payload["heatmap_live_matches"] = _enrich_heatmap_live_matches(
+                live_rows,
+                fixtures,
+                league_id=league_id,
+                league_name=payload.get("league_name", ""),
+                season_requested=season_norm,
+                season_resolved=payload.get("season_resolved"),
+                feed=payload.get("feed", "soccerfixtures"),
+            )
+            payload["heatmap_live_match_ids"] = sorted(
+                m["match_id"] for m in payload["heatmap_live_matches"] if m.get("match_id")
+            )
+            return payload
+        del FIXTURES_CACHE[cache_key]
 
-    urls, meta = _fixtures_feed_urls(league_id, season_norm)
+    paths, meta = _fixtures_feed_paths(league_id, season_norm)
     last_error: Optional[str] = None
 
     try:
-        for idx, url in enumerate(urls):
-            response = requests.get(url, timeout=REQUEST_TIMEOUT)
-            if response.status_code >= 400:
-                last_error = f"{response.status_code} for {url.split(API_KEY)[-1][:80]}"
-                if idx < len(urls) - 1:
+        for idx, feed_path in enumerate(paths):
+            try:
+                data, _from_cache = fetch_goalserve_json(feed_path)
+            except GoalserveHttpError as err:
+                last_error = f"{err.status_code} for {feed_path}"
+                if idx < len(paths) - 1:
                     meta["fallback_from"] = meta.get("feed", "soccerhistory")
                     meta["feed"] = "soccerfixtures"
                     meta.setdefault(
@@ -375,23 +411,35 @@ async def fetch_fixtures(league_id: str, season: str | None = None) -> Dict[str,
                     continue
                 return {
                     "error": (
-                        f"Failed to fetch fixtures: {response.status_code} Server Error. "
+                        f"Failed to fetch fixtures: {err.status_code} Server Error. "
                         f"Season '{season_norm}' may be invalid for league {league_id}. "
                         f"Check seasons on /leagues — use exact tokens (e.g. 2025 not 2025-2026 for some leagues)."
                     )
                 }
-
-            data = response.json()
             league_name, fixture_list = _parse_fixtures_payload(data)
-            fixture_list = _annotate_fixtures_heatmap_availability(league_id, fixture_list)
-            live_ids = sorted(fetch_live_heatmap_match_ids(league_id))
+            fixture_list, live_rows = _annotate_fixtures_heatmap_availability(
+                league_id, fixture_list
+            )
+            heatmap_live_matches = _enrich_heatmap_live_matches(
+                live_rows,
+                fixture_list,
+                league_id=league_id,
+                league_name=league_name,
+                season_requested=season_norm,
+                season_resolved=meta.get("season_resolved"),
+                feed=meta.get("feed", "soccerfixtures"),
+            )
 
             payload = {
                 "league_name": league_name,
                 "fixtures": fixture_list,
-                "heatmap_live_match_ids": live_ids,
+                "heatmap_live_matches": heatmap_live_matches,
+                "heatmap_live_match_ids": sorted(
+                    m["match_id"] for m in heatmap_live_matches if m.get("match_id")
+                ),
                 **meta,
             }
+            payload["_cache_v"] = _FIXTURES_CACHE_VERSION
             FIXTURES_CACHE[cache_key] = payload
             return payload
 
@@ -501,59 +549,157 @@ def pick_next_matches(
 
 
 def fetch_next_matches_for_league(league_id: str, limit: int = 2) -> List[Dict[str, Any]]:
-    """Current-season ``soccerfixtures/leagueid/{id}`` → next/live matches (cached)."""
+    """Current-season ``soccerfixtures/leagueid/{id}`` → next/live matches (20s HTTP cache)."""
     lid = str(league_id).strip()
-    now = time.time()
-    cached = _NEXT_MATCHES_CACHE.get(lid)
-    if cached and (now - cached.get("loaded_at", 0)) < _NEXT_MATCHES_TTL:
-        return list(cached.get("matches") or [])[:limit]
-
-    url = f"{BASE_URL}{API_KEY}/soccerfixtures/leagueid/{lid}?json=1"
-    matches: List[Dict[str, Any]] = []
     try:
-        response = requests.get(url, timeout=_NEXT_MATCHES_FETCH_TIMEOUT)
-        if response.status_code < 400:
-            data = response.json()
-            _, fixture_list = _parse_fixtures_payload(data)
-            matches = pick_next_matches(fixture_list, limit=limit)
+        data, _from_cache = fetch_goalserve_json(
+            f"soccerfixtures/leagueid/{lid}",
+            timeout=_NEXT_MATCHES_FETCH_TIMEOUT,
+        )
+        _, fixture_list = _parse_fixtures_payload(data)
+        return pick_next_matches(fixture_list, limit=limit)
     except Exception as exc:
         print(f"Next matches fetch error ({lid}): {exc}")
-        if cached:
-            return list(cached.get("matches") or [])[:limit]
+        return []
 
-    _NEXT_MATCHES_CACHE[lid] = {"matches": matches, "loaded_at": now}
-    return matches
+
+def _parse_heatmap_feed_match_node(match: Dict[str, Any]) -> Dict[str, Any]:
+    """One match row from ``commentaries/{league_id}_heatmap.xml``."""
+    mid = _norm_match_id(match.get("@id"))
+    local = match.get("localteam") or {}
+    visitor = match.get("visitorteam") or {}
+    if isinstance(local, list):
+        local = local[0] if local else {}
+    if isinstance(visitor, list):
+        visitor = visitor[0] if visitor else {}
+
+    home = (local.get("@name") or "Home").strip()
+    away = (visitor.get("@name") or "Away").strip()
+    score_raw = (match.get("@score") or "").strip()
+    if score_raw:
+        score = score_raw.replace(" - ", "-").replace(" ", "")
+    else:
+        lh = local.get("@score") or local.get("@ft_score") or ""
+        va = visitor.get("@score") or visitor.get("@ft_score") or ""
+        score = f"{lh}-{va}".strip("-") if lh or va else ""
+
+    return {
+        "match_id": mid,
+        "date": (match.get("@date") or "").strip() or None,
+        "time": (match.get("@time") or "").strip() or None,
+        "status": (match.get("@status") or "").strip() or None,
+        "minute": (match.get("@minute") or "").strip() or None,
+        "home_team": home,
+        "away_team": away,
+        "score": score or None,
+        "name": f"{home} vs {away}",
+    }
+
+
+def fetch_live_heatmap_matches(league_id: str) -> List[Dict[str, Any]]:
+    """
+    Live matches in ``commentaries/{league_id}_heatmap.xml`` with team names and status.
+    """
+    lid = str(league_id).strip()
+    rows: List[Dict[str, Any]] = []
+    try:
+        data, _from_cache = fetch_goalserve_json(f"commentaries/{lid}_heatmap.xml")
+        tournament = (data.get("commentaries") or {}).get("tournament") or {}
+        league_from_feed = (tournament.get("@league") or "").strip()
+        for m in _as_match_list(tournament.get("match")):
+            row = _parse_heatmap_feed_match_node(m)
+            if not row.get("match_id"):
+                continue
+            if league_from_feed:
+                row["league_name_feed"] = league_from_feed
+            rows.append(row)
+    except Exception as exc:
+        print(f"Live heatmap matches fetch error: {exc}")
+    return rows
 
 
 def fetch_live_heatmap_match_ids(league_id: str) -> Set[str]:
-    """
-    Match IDs currently present in ``commentaries/{league_id}_heatmap.xml`` (live only).
-    See goalserve-api-docs: heatmap is not stored for finished historical fixtures.
-    """
-    lid = str(league_id).strip()
-    now = time.time()
-    cached = _LIVE_HEATMAP_IDS_CACHE.get(lid)
-    if cached and (now - cached.get("loaded_at", 0)) < _LIVE_HEATMAP_TTL:
-        return set(cached.get("ids") or [])
+    """Match IDs currently in the live heatmap feed."""
+    return {m["match_id"] for m in fetch_live_heatmap_matches(league_id) if m.get("match_id")}
 
-    ids: Set[str] = set()
-    url = f"{BASE_URL}{API_KEY}/commentaries/{lid}_heatmap.xml?json=1"
+
+def _current_season_fixture_index(league_id: str) -> Dict[str, Dict[str, Any]]:
+    """Match id → row from current ``soccerfixtures/leagueid`` (for team names)."""
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
-        if response.status_code < 400:
-            data = response.json()
-            tournament = (data.get("commentaries") or {}).get("tournament") or {}
-            for m in _as_match_list(tournament.get("match")):
-                mid = _norm_match_id(m.get("@id"))
-                if mid:
-                    ids.add(mid)
-    except Exception as exc:
-        print(f"Live heatmap IDs fetch error: {exc}")
-        if cached:
-            return set(cached.get("ids") or [])
+        data, _from_cache = fetch_goalserve_json(f"soccerfixtures/leagueid/{league_id}")
+        _, fixtures = _parse_fixtures_payload(data)
+        return {_norm_match_id(f.get("match_id")): f for f in fixtures if f.get("match_id")}
+    except Exception:
+        return {}
 
-    _LIVE_HEATMAP_IDS_CACHE[lid] = {"ids": ids, "loaded_at": now}
-    return ids
+
+def _enrich_heatmap_live_matches(
+    live_rows: List[Dict[str, Any]],
+    fixture_list: List[Dict[str, Any]],
+    *,
+    league_id: str = "",
+    league_name: str,
+    season_requested: Optional[str],
+    season_resolved: Optional[str],
+    feed: str,
+) -> List[Dict[str, Any]]:
+    """Merge live heatmap feed rows with fixture list + UI season context."""
+    season_label = (
+        season_resolved
+        or season_requested
+        or "current season"
+    )
+    by_id = {_norm_match_id(f.get("match_id")): f for f in fixture_list if f.get("match_id")}
+    current_by_id = _current_season_fixture_index(league_id) if league_id else {}
+
+    enriched: List[Dict[str, Any]] = []
+    for row in live_rows:
+        mid = row.get("match_id")
+        fix = by_id.get(mid) or current_by_id.get(mid) or {}
+        home = (fix.get("localteam_name") or row.get("home_team") or "").strip()
+        away = (fix.get("visitorteam_name") or row.get("away_team") or "").strip()
+        date = row.get("date") or fix.get("date")
+        time = row.get("time") or fix.get("time")
+        status = row.get("status") or fix.get("status")
+        score = row.get("score")
+        if not score and fix:
+            ls = fix.get("localteam_score") or ""
+            vs = fix.get("visitorteam_score") or ""
+            if ls or vs:
+                score = f"{ls}-{vs}"
+
+        if home and away:
+            match_name = f"{home} vs {away}"
+        else:
+            match_name = f"Match {mid}" + (f" ({status})" if status else "")
+
+        display = fix.get("display") or (
+            f"{date or '—'} {time or ''} — {match_name}"
+            + (f" ({score})" if score else "")
+            + (f" [{status}]" if status else "")
+        ).strip()
+
+        enriched.append(
+            {
+                "match_id": mid,
+                "season": season_label,
+                "season_requested": season_requested,
+                "season_resolved": season_resolved,
+                "league_name": league_name or row.get("league_name_feed") or "",
+                "feed": feed,
+                "name": match_name,
+                "home_team": home or None,
+                "away_team": away or None,
+                "date": date,
+                "time": time,
+                "status": status,
+                "minute": row.get("minute"),
+                "score": score,
+                "display": display,
+                "in_fixtures_feed": bool(fix),
+            }
+        )
+    return enriched
 
 
 def _league_has_heatmap_feed(league_id: str) -> bool:
@@ -567,20 +713,24 @@ def _league_has_heatmap_feed(league_id: str) -> bool:
 
 
 def _annotate_fixtures_heatmap_availability(
-    league_id: str, fixture_list: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+    league_id: str,
+    fixture_list: List[Dict[str, Any]],
+    live_rows: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     if not _league_has_heatmap_feed(league_id):
         for f in fixture_list:
             f["heatmap_available"] = False
-        return fixture_list
+        return fixture_list, []
 
-    live_ids = fetch_live_heatmap_match_ids(league_id)
+    if live_rows is None:
+        live_rows = fetch_live_heatmap_matches(league_id)
+    live_ids = {m["match_id"] for m in live_rows if m.get("match_id")}
     for f in fixture_list:
         mid = _norm_match_id(f.get("match_id"))
         f["heatmap_available"] = mid in live_ids
         if f["heatmap_available"]:
             f["display"] = f"{f.get('display', '')} [live heatmap]"
-    return fixture_list
+    return fixture_list, live_rows
 
 
 # --- ASYNC FUNCTION: Fetch and Process Heatmap Data ---
@@ -592,12 +742,32 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
     mid = _norm_match_id(match_id)
 
     league_details = fetch_league_data(league_id)
-    if "error" in league_details:
-        return league_details
+    if not isinstance(league_details, dict):
+        league_details = {}
+    all_players = league_details.get("all_players") or {}
+    if not isinstance(all_players, dict):
+        all_players = {}
+    league_name = (league_details.get("league_name") or f"League {league_id}").strip()
+    if league_details.get("roster_warning"):
+        print(f"League roster warning ({league_id}): {league_details.get('roster_warning')}")
+    league_details = {
+        "league_name": league_name,
+        "all_players": all_players,
+    }
+
+    live_rows = fetch_live_heatmap_matches(league_id)
+    live_ids = {r["match_id"] for r in live_rows if r.get("match_id")}
+    live_by_id = {r["match_id"]: r for r in live_rows if r.get("match_id")}
 
     fixtures_response = await fetch_fixtures(league_id, season)
+    heatmap_live_matches = (
+        fixtures_response.get("heatmap_live_matches", []) if isinstance(fixtures_response, dict) else []
+    )
+
     if "error" in fixtures_response:
-        return fixtures_response
+        if mid not in live_ids:
+            return fixtures_response
+        fixtures_response = {"fixtures": [], "heatmap_live_matches": heatmap_live_matches}
 
     target_fixture = next(
         (
@@ -608,15 +778,34 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
         None,
     )
 
+    feed_row = live_by_id.get(mid)
+    if not target_fixture and feed_row:
+        target_fixture = {
+            "match_id": mid,
+            "date": feed_row.get("date") or "N/A",
+            "time": feed_row.get("time") or "N/A",
+            "status": feed_row.get("status") or "N/A",
+            "localteam_name": feed_row.get("home_team", "Home"),
+            "visitorteam_name": feed_row.get("away_team", "Away"),
+            "localteam_score": "",
+            "visitorteam_score": "",
+        }
+        if feed_row.get("score"):
+            parts = str(feed_row["score"]).split("-", 1)
+            if len(parts) == 2:
+                target_fixture["localteam_score"] = parts[0].strip()
+                target_fixture["visitorteam_score"] = parts[1].strip()
+
     if not target_fixture:
         return {
             "error": (
                 f"Match ID {match_id} not found in the fixtures feed for league {league_id}"
-                f"{f' (season {season})' if season else ''}."
-            )
+                f"{f' (season {season})' if season else ''} and not in the live heatmap feed."
+            ),
+            "heatmap_live_matches": heatmap_live_matches,
+            "heatmap_live_match_ids": sorted(live_ids),
         }
 
-    live_ids = fetch_live_heatmap_match_ids(league_id)
     if mid not in live_ids:
         ids_hint = ", ".join(sorted(live_ids)[:12]) if live_ids else "(none right now)"
         return {
@@ -626,17 +815,14 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
                 f"not for finished games from season/history fixtures. "
                 f"Live heatmap match IDs now: {ids_hint}."
             ),
+            "heatmap_live_matches": heatmap_live_matches,
             "heatmap_live_match_ids": sorted(live_ids),
             "match_status": target_fixture.get("status"),
             "match_date": target_fixture.get("date"),
         }
 
-    url = f"{BASE_URL}{API_KEY}/commentaries/{league_id}_heatmap.xml?json=1"
-
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
+        data, _from_cache = fetch_goalserve_json(f"commentaries/{league_id}_heatmap.xml")
 
         tournament = (data.get("commentaries") or {}).get("tournament") or {}
         target_match = next(
@@ -647,12 +833,13 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
         if not target_match:
             return {
                 "error": f"Match {match_id} left the live heatmap feed. Refresh fixtures and pick a live match.",
+                "heatmap_live_matches": heatmap_live_matches,
                 "heatmap_live_match_ids": sorted(live_ids),
             }
 
-        heatmaps = target_match.get("heatmaps", {})
-        local_team_data = process_team_heatmaps(heatmaps.get("localteam", {}))
-        visitor_team_data = process_team_heatmaps(heatmaps.get("visitorteam", {}))
+        heatmaps = target_match.get("heatmaps") if isinstance(target_match.get("heatmaps"), dict) else {}
+        local_team_data = process_team_heatmaps(heatmaps.get("localteam"))
+        visitor_team_data = process_team_heatmaps(heatmaps.get("visitorteam"))
 
         if not local_team_data and not visitor_team_data:
             return {
@@ -660,6 +847,7 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
                     f"Match {match_id} is in the live feed but has no player heatmap points yet "
                     "(match may be pre-kickoff or data not populated)."
                 ),
+                "heatmap_live_matches": heatmap_live_matches,
                 "heatmap_live_match_ids": sorted(live_ids),
             }
 
@@ -676,8 +864,9 @@ async def fetch_and_process_heatmap(match_id: str, league_id: str, season: str |
 
         def enrich_player_data(player_data_map: Dict[str, Any]) -> Dict[str, Any]:
             enriched = {}
+            roster = league_details.get("all_players") or {}
             for player_id, pdata in player_data_map.items():
-                name = league_details["all_players"].get(player_id, f"Player ID {player_id}")
+                name = roster.get(player_id, f"Player ID {player_id}")
                 pdata["name"] = name
                 enriched[player_id] = pdata
             return enriched
@@ -758,17 +947,11 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
 
     mid = _norm_match_id(match_id)
 
-    # 1. Fetch commentary data (lineups + live stats)
-    commentary_url = f"{BASE_URL}{API_KEY}/commentaries/{league_id}.xml?json=1"
-    heatmap_url    = f"{BASE_URL}{API_KEY}/commentaries/{league_id}_heatmap.xml?json=1"
-
     lineup_data: Dict[str, Any] = {}
     heatmap_data: Dict[str, Any] = {}
 
     try:
-        r = requests.get(commentary_url, timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        c_data = r.json()
+        c_data, _from_cache = fetch_goalserve_json(f"commentaries/{league_id}.xml")
 
         tournament = c_data.get("commentaries", {}).get("tournament", {})
         matches = tournament.get("match", [])
@@ -791,11 +974,8 @@ async def fetch_match_positions(match_id: str, league_id: str, season: str | Non
     except Exception as e:
         lineup_data = {"error": f"Commentary fetch failed: {e}"}
 
-    # 2. Fetch heatmap data
     try:
-        r = requests.get(heatmap_url, timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        h_data = r.json()
+        h_data, _from_cache = fetch_goalserve_json(f"commentaries/{league_id}_heatmap.xml")
 
         tournament = h_data.get("commentaries", {}).get("tournament", {})
         matches = tournament.get("match", [])

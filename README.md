@@ -33,6 +33,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `GOALSERVE_API_KEY` | Yes (for Goalserve feeds & WS auth) | Your Goalserve API key. |
 | `GOALSERVE_INPLAY_SOCCER_URL` | No | Full URL for the inplay gzip feed if Goalserve gave you a custom link. If unset, the app uses `http://inplay.goalserve.com/inplay-soccer.gz` and appends `?key=<GOALSERVE_API_KEY>` when the key is set. |
 | `INPLAY_SCHEDULER_JOB` | No | `true` / `false` — background poll of the inplay gzip feed and snapshot files (default `false`). |
+| `GOALSERVE_HTTP_CACHE_TTL_SECONDS` | No | Seconds to reuse Goalserve JSON responses in memory without a new HTTP call (default `20`). Same feed path (e.g. `soccernew/live`) is only fetched once per window — helps avoid 429 rate limits. |
+| `GOALSERVE_WS_ENABLED` | No | `true` / `false` — start Goalserve WebSocket proxy on startup (default `false`). |
 
 Your server **IP must be whitelisted** in Goalserve for REST and WebSocket access to work.
 

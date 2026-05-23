@@ -74,7 +74,61 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
         
-        #league-display { font-size: 1.2em; color: #88ff88; } /* Bright green for league name */
+        #league-display { font-size: 1.2em; color: #88ff88; margin-bottom: 0.5em; }
+
+        .heatmap-live-section {
+            text-align: left;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #555;
+        }
+        .heatmap-live-section h3 {
+            font-size: 1em;
+            color: #a5d6a7;
+            margin: 0 0 10px;
+            font-weight: 600;
+        }
+        .heatmap-live-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .heatmap-live-item {
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .heatmap-live-item:hover,
+        .heatmap-live-item.selected {
+            border-color: #4CAF50;
+            background: #333;
+        }
+        .heatmap-live-item .match-title {
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        .heatmap-live-item .match-meta {
+            color: #9ca3af;
+            font-size: 0.82em;
+            margin-top: 4px;
+            line-height: 1.45;
+        }
+        .heatmap-live-item .match-meta span {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .heatmap-live-empty {
+            color: #9ca3af;
+            font-size: 0.9em;
+            font-style: italic;
+        }
 
         #score-display {
             font-size: 2.2em;
@@ -221,6 +275,11 @@
 
     <div id="match-info">
         <h2 id="league-display"></h2>
+        <div id="heatmap-live-section" class="heatmap-live-section" hidden>
+            <h3>Available live heatmap matches</h3>
+            <ul id="heatmap-live-list" class="heatmap-live-list"></ul>
+            <p id="heatmap-live-empty" class="heatmap-live-empty" hidden>No matches in the live heatmap feed right now.</p>
+        </div>
         <p id="date-display"></p>
         
         <p id="status-minute-display"></p>

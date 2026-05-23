@@ -24,6 +24,9 @@ function apiUrl() {
     if (country) params.set('country', country);
     params.set('page', String(currentPage));
     params.set('per_page', String(getPerPage()));
+    if (sortMode === 'next_match') {
+        params.set('include_next_matches', 'true');
+    }
     return `/api/v1/leagues?${params.toString()}`;
 }
 
@@ -59,7 +62,7 @@ async function loadLeagues() {
     const content = document.getElementById('content');
     const loadingNote = sortMode === 'next_match'
         ? 'Loading & sorting by next match time (may take 30–90s)…'
-        : 'Loading leagues… (next matches for this page may take 20–40s)';
+        : 'Loading leagues…';
     content.innerHTML = `
         <div class="loading">
             <div class="spinner"></div>

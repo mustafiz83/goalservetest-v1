@@ -45,6 +45,7 @@ class Settings:
     GOALSERVE_WS_BASE_URL: str = "ws://live.goalserve.com/ws"
     GOALSERVE_WS_AUTH_URL: str = "http://live.goalserve.com/api/v1/auth/gettoken"
     INPLAY_SCHEDULER_JOB: bool = _get_bool("INPLAY_SCHEDULER_JOB", False)
+    GOALSERVE_WS_ENABLED: bool = _get_bool("GOALSERVE_WS_ENABLED", False)
 
     # Scheduler and polling controls
     INPLAY_SCHEDULER_INTERVAL_SECONDS: int = _get_int("INPLAY_SCHEDULER_INTERVAL_SECONDS", 1)
@@ -55,6 +56,7 @@ class Settings:
     GOALSERVE_INPLAY_TIMEOUT_SECONDS: int = _get_int("GOALSERVE_INPLAY_TIMEOUT_SECONDS", 5)
     GOALSERVE_INPLAY_SCHEDULER_TIMEOUT_SECONDS: int = _get_int("GOALSERVE_INPLAY_SCHEDULER_TIMEOUT_SECONDS", 2)
     GOALSERVE_LIVE_TIMEOUT_SECONDS: float = _get_float("GOALSERVE_LIVE_TIMEOUT_SECONDS", 15.0)
+    GOALSERVE_HTTP_CACHE_TTL_SECONDS: int = _get_int("GOALSERVE_HTTP_CACHE_TTL_SECONDS", 20)
     GOALSERVE_WS_AUTH_TIMEOUT_SECONDS: float = _get_float("GOALSERVE_WS_AUTH_TIMEOUT_SECONDS", 10.0)
 
     @property

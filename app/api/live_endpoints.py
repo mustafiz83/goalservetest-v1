@@ -24,7 +24,10 @@ async def get_live_matches() -> JSONResponse:
         content={
             "updated": result["updated"],
             "total_matches": len(result["matches"]),
-            "matches": result["matches"]
+            "matches": result["matches"],
+            "from_cache": result.get("from_cache", False),
+            "stale": result.get("stale", False),
+            "warning": result.get("warning"),
         }
     )
 

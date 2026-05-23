@@ -7,6 +7,88 @@ let currentMatchId = '';
 let currentSeason = '';
 let heatmapLeagues = [];
 let lastLiveHeatmapIds = [];
+let lastLiveHeatmapMatches = [];
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = String(text ?? '');
+    return div.innerHTML;
+}
+
+function normalizeHeatmapLiveMatches(data, season) {
+    let matches = data.heatmap_live_matches || [];
+    const ids = data.heatmap_live_match_ids || [];
+    if (!matches.length && ids.length) {
+        const seasonLabel = data.season_resolved || season || 'current season';
+        matches = ids.map(id => ({
+            match_id: String(id),
+            season: seasonLabel,
+            name: `Match ${id}`,
+            home_team: '',
+            away_team: '',
+            status: 'live heatmap feed',
+            in_fixtures_feed: false,
+        }));
+    }
+    return matches;
+}
+
+function renderHeatmapLiveMatches(matches) {
+    const section = document.getElementById('heatmap-live-section');
+    const list = document.getElementById('heatmap-live-list');
+    const empty = document.getElementById('heatmap-live-empty');
+    if (!section || !list) return;
+
+    section.hidden = false;
+    list.innerHTML = '';
+
+    if (!matches.length) {
+        empty.hidden = false;
+        return;
+    }
+    empty.hidden = true;
+
+    matches.forEach(m => {
+        const li = document.createElement('li');
+        li.className = 'heatmap-live-item';
+        li.dataset.matchId = m.match_id;
+        const season = m.season || '—';
+        const dateTime = [m.date, m.time].filter(Boolean).join(' ') || '—';
+        const status = m.status ? `Status: ${m.status}` : '';
+        const minute = m.minute ? `Min: ${m.minute}` : '';
+        const score = m.score ? `Score: ${m.score}` : '';
+        const inFeed = m.in_fixtures_feed
+            ? 'Listed in loaded fixtures'
+            : 'Live heatmap feed only (not in season fixtures list)';
+
+        li.innerHTML = `
+            <div class="match-title">${escapeHtml(m.name || m.match_id)}</div>
+            <div class="match-meta">
+                <span><strong>Season:</strong> ${escapeHtml(season)}</span>
+                <span><strong>ID:</strong> ${escapeHtml(m.match_id)}</span>
+                <span>${escapeHtml(dateTime)}</span>
+                ${score ? `<span>${escapeHtml(score)}</span>` : ''}
+                ${status ? `<span>${escapeHtml(status)}</span>` : ''}
+                ${minute ? `<span>${escapeHtml(minute)}</span>` : ''}
+            </div>
+            <div class="match-meta">${escapeHtml(inFeed)}</div>
+        `;
+
+        li.addEventListener('click', () => {
+            const select = document.getElementById('fixture-select');
+            const opt = Array.from(select.options).find(o => o.value === m.match_id);
+            if (opt) {
+                select.value = m.match_id;
+            }
+            currentMatchId = m.match_id;
+            loadHeatmap(getLeagueId(), m.match_id, currentSeason);
+            document.querySelectorAll('.heatmap-live-item').forEach(el => el.classList.remove('selected'));
+            li.classList.add('selected');
+        });
+
+        list.appendChild(li);
+    });
+}
 
 function getLeagueId() {
     return document.getElementById('leagueSelect').value;
@@ -20,9 +102,14 @@ function parseErrorDetail(detail) {
     if (!detail) return 'Unknown error';
     if (typeof detail === 'string') return detail;
     if (typeof detail === 'object') {
+        const matches = detail.heatmap_live_matches || [];
         const ids = detail.heatmap_live_match_ids || [];
         let msg = detail.message || JSON.stringify(detail);
-        if (ids.length) {
+        if (matches.length) {
+            msg += '\n\nLive heatmap matches:\n' + matches.map(m =>
+                `• ${m.name || m.match_id} — season ${m.season || '—'}, ID ${m.match_id}`
+            ).join('\n');
+        } else if (ids.length) {
             msg += `\n\nLive heatmap match IDs right now: ${ids.join(', ')}`;
         }
         return msg;
@@ -133,7 +220,8 @@ function loadFixtures() {
         .then(data => {
             if (data.error) throw new Error(data.error);
 
-            lastLiveHeatmapIds = data.heatmap_live_match_ids || [];
+            lastLiveHeatmapMatches = normalizeHeatmapLiveMatches(data, season);
+            lastLiveHeatmapIds = lastLiveHeatmapMatches.map(m => m.match_id).filter(Boolean);
 
             let seasonDisplay = season ? ` (${season})` : ' (current season)';
             if (data.season_resolved && data.season_resolved !== season) {
@@ -142,12 +230,14 @@ function loadFixtures() {
                 seasonDisplay = ` (${data.season_resolved})`;
             }
 
-            const liveHint = lastLiveHeatmapIds.length
-                ? ` · ${lastLiveHeatmapIds.length} live heatmap match(es): ${lastLiveHeatmapIds.join(', ')}`
+            const liveHint = lastLiveHeatmapMatches.length
+                ? ` · ${lastLiveHeatmapMatches.length} live heatmap match(es) — see list below`
                 : ' · no live heatmap matches in feed right now';
 
             document.getElementById('league-display').textContent =
-                data.league_name + seasonDisplay + (data.feed ? ` [${data.feed}]` : '') + liveHint;
+                (data.league_name || 'League') + seasonDisplay + (data.feed ? ` [${data.feed}]` : '') + liveHint;
+
+            renderHeatmapLiveMatches(lastLiveHeatmapMatches);
 
             if (data.note) console.info('Fixtures:', data.note);
 
@@ -159,6 +249,23 @@ function loadFixtures() {
             select.innerHTML = '';
 
             if (!fixtures.length) {
+                select.innerHTML = '';
+                if (lastLiveHeatmapMatches.length) {
+                    const hint = document.getElementById('heatmap-hint');
+                    hint.textContent =
+                        `${lastLiveHeatmapMatches.length} live heatmap match(es) in feed — select below or click a row in the list.`;
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = '-- Select a live heatmap match --';
+                    select.appendChild(defaultOption);
+                    lastLiveHeatmapMatches.forEach(m => {
+                        const option = document.createElement('option');
+                        option.value = m.match_id;
+                        option.textContent = `${m.name} · ${m.season} · ${m.match_id}`;
+                        select.appendChild(option);
+                    });
+                    return;
+                }
                 const msg = heatmapOnly
                     ? 'No fixtures with live heatmap. Try current season or uncheck filter.'
                     : 'No fixtures found';
@@ -202,6 +309,7 @@ function loadFixtures() {
             select.innerHTML = '<option value="">Error loading fixtures</option>';
             alert(`Error loading fixtures: ${error.message}`);
             document.getElementById('league-display').textContent = 'Error loading league data';
+            renderHeatmapLiveMatches([]);
         });
 }
 

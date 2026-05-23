@@ -9,12 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-import requests
-
+from app.services.goalserve_http_cache import fetch_goalserve_json
 from app.services.goalserve_service import (
-    API_KEY,
-    BASE_URL,
-    REQUEST_TIMEOUT,
     _parse_fixture_kickoff,
     fetch_next_matches_for_league,
 )
@@ -25,8 +21,7 @@ FULLSOCCER_DOC = DOCS_DIR / "fullsoccer-wo (2).txt"
 _CACHE: Dict[str, Any] = {"loaded_at": 0.0, "leagues": []}
 _CACHE_TTL_SECONDS = 3600
 
-_LIVE_CACHE: Dict[str, Any] = {"counts": {}, "loaded_at": 0.0, "feed_updated": None}
-_LIVE_CACHE_TTL_SECONDS = 45
+_LIVE_COUNTS_CACHE: Dict[str, Any] = {"counts": {}, "feed_updated": None}
 
 
 def _as_list(node: Any) -> List[Any]:
@@ -60,10 +55,7 @@ def _parse_season_names(block: Any) -> List[str]:
 
 
 def _fetch_json(path: str) -> Dict[str, Any]:
-    url = f"{BASE_URL}{API_KEY}/{path}?json=1"
-    response = requests.get(url, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-    data = response.json()
+    data, _from_cache = fetch_goalserve_json(path)
     return data if isinstance(data, dict) else {}
 
 
@@ -114,14 +106,7 @@ def _normalize_mapping_row(row: Dict[str, Any], commentary_ids: Set[str]) -> Dic
 
 
 def _fetch_live_match_counts_by_league() -> Dict[str, int]:
-    """League id → number of matches in ``soccernew/live`` (short TTL cache)."""
-    now = time.time()
-    if (
-        _LIVE_CACHE["counts"]
-        and (now - _LIVE_CACHE["loaded_at"]) < _LIVE_CACHE_TTL_SECONDS
-    ):
-        return _LIVE_CACHE["counts"]
-
+    """League id → number of matches in ``soccernew/live`` (shared 20s HTTP cache)."""
     counts: Dict[str, int] = {}
     feed_updated: Optional[str] = None
     try:
@@ -143,14 +128,12 @@ def _fetch_live_match_counts_by_league() -> Dict[str, int]:
             if n > 0:
                 counts[lid] = counts.get(lid, 0) + n
     except Exception:
-        # Keep last good snapshot if refresh fails
-        if _LIVE_CACHE["counts"]:
-            return _LIVE_CACHE["counts"]
+        if _LIVE_COUNTS_CACHE["counts"]:
+            return _LIVE_COUNTS_CACHE["counts"]
         return {}
 
-    _LIVE_CACHE["counts"] = counts
-    _LIVE_CACHE["loaded_at"] = now
-    _LIVE_CACHE["feed_updated"] = feed_updated
+    _LIVE_COUNTS_CACHE["counts"] = counts
+    _LIVE_COUNTS_CACHE["feed_updated"] = feed_updated
     return counts
 
 
@@ -304,7 +287,7 @@ def get_league_catalog(
     sort: str = "default",
     page: int = 1,
     per_page: int = DEFAULT_PER_PAGE,
-    include_next_matches: bool = True,
+    include_next_matches: bool = False,
     next_matches_limit: int = 2,
 ) -> Dict[str, Any]:
     leagues = load_league_catalog()
@@ -374,7 +357,7 @@ def get_league_catalog(
         "heatmap_league_count": sum(1 for lg in leagues if lg.get("heatmap_league_id")),
         "live_league_count": len(live_counts),
         "live_match_total": sum(live_counts.values()),
-        "live_feed_updated": _LIVE_CACHE.get("feed_updated"),
+        "live_feed_updated": _LIVE_COUNTS_CACHE.get("feed_updated"),
         "countries": countries,
         "sources": {
             "mapping": "soccerfixtures/data/mapping",

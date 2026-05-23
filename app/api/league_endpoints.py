@@ -25,7 +25,8 @@ async def list_leagues(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     per_page: int = Query(50, ge=1, le=200, description="Rows per page"),
     include_next_matches: bool = Query(
-        True, description="Attach 1–2 upcoming/live fixtures per league (current season feed)"
+        False,
+        description="Attach next fixtures per row (slow; use with sort=next_match)",
     ),
 ) -> JSONResponse:
     """

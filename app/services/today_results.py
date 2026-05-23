@@ -1,11 +1,7 @@
-import httpx
-import os
 import re
-from typing import Dict, List, Any, Optional
-from app.core.config import settings
+from typing import Any, Dict, List, Optional
 
-GOALSERVE_API_KEY = os.getenv("GOALSERVE_API_KEY", "your_api_key_here")
-BASE_URL = "http://www.goalserve.com/getfeed"
+from app.services.goalserve_http_cache import GoalserveHttpError, fetch_goalserve_json_async
 
 class TodayResultService:
     """Service for fetching and processing live football match data"""
@@ -28,22 +24,21 @@ class TodayResultService:
         """Fetch all live football matches (or matches scheduled for today/tomorrow)"""
         print("Today's match result")
         try:
-            async with httpx.AsyncClient() as client:
-                # Using 'home' endpoint to get all matches for the day, including scheduled ones.
-                url = f"{BASE_URL}/{GOALSERVE_API_KEY}/soccernew/home?json=1"
-                print(url)
-                response = await client.get(url, timeout=settings.GOALSERVE_LIVE_TIMEOUT_SECONDS)
-                response.raise_for_status()
-                
-                data = response.json()
-                matches = TodayResultService._parse_live_matches(data)
-                print(f"Total Matches Parsed: {len(matches)}")
-                return {
-                    "status": "success",
-                    # Safely access the updated timestamp
-                    "updated": data.get("scores", {}).get("@updated"),
-                    "matches": matches
-                }
+            data, from_cache = await fetch_goalserve_json_async("soccernew/home")
+            matches = TodayResultService._parse_live_matches(data)
+            print(f"Total Matches Parsed: {len(matches)} (cached={from_cache})")
+            return {
+                "status": "success",
+                "updated": data.get("scores", {}).get("@updated"),
+                "matches": matches,
+                "from_cache": from_cache,
+            }
+        except GoalserveHttpError as e:
+            return {
+                "status": "error",
+                "message": str(e),
+                "matches": [],
+            }
         except Exception as e:
             # Catch HTTPX errors, JSON decoding errors, etc.
             print(f"Error fetching live matches: {e}")

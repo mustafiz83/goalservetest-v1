@@ -10,6 +10,8 @@ from app.api.live_endpoints import router as football_live_router
 from app.api.today_result_endpoint import router as today_result
 from app.api.ws_endpoints import router as ws_router
 from app.api.league_endpoints import router as league_router
+from app.core.config import settings
+from app.services.goalserve_service import LEAGUE_DATA_CACHE, FIXTURES_CACHE
 from app.services.inplay_service import start_scheduler, stop_scheduler
 from app.services.ws_soccer_service import soccer_ws_service
 
@@ -101,16 +103,25 @@ async def serve_leagues_catalog():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "app": "goalservetest-v1",
+        "league_roster_fix": "2025-05-23",
+    }
 
 
 @app.on_event("startup")
 async def startup_event():
+    # Drop in-memory caches so code fixes apply after restart (no stale error entries)
+    LEAGUE_DATA_CACHE.clear()
+    FIXTURES_CACHE.clear()
     start_scheduler()
-    soccer_ws_service.start()
+    if settings.GOALSERVE_WS_ENABLED:
+        soccer_ws_service.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     stop_scheduler()
-    await soccer_ws_service.stop()
+    if settings.GOALSERVE_WS_ENABLED:
+        await soccer_ws_service.stop()

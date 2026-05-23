@@ -2,42 +2,73 @@ let allMatches = [];
 let filteredLeagueId = null;
 let refreshInterval = null;
 
-async function loadLiveMatches() {
+const LIVE_FETCH_TIMEOUT_MS = 25000;
+
+async function fetchLiveApi() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LIVE_FETCH_TIMEOUT_MS);
     try {
-        const contentDiv = document.getElementById('content');
-        contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading live matches...</p></div>';
-
-        const response = await fetch('/api/v1/football/live');
+        const response = await fetch('/api/v1/football/live', {
+            signal: controller.signal,
+            headers: { Accept: 'application/json' },
+        });
         const data = await response.json();
-
         if (!response.ok) {
-            throw new Error(data.detail || 'Failed to load matches');
+            const msg = data.detail || data.message || `HTTP ${response.status}`;
+            throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
         }
+        if (data.status === 'error') {
+            throw new Error(data.message || 'Live feed error');
+        }
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
+async function loadLiveMatches() {
+    const contentDiv = document.getElementById('content');
+    const matchCountEl = document.getElementById('matchCount');
+    contentDiv.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading live matches from Goalserve…</p>
+        </div>`;
+    if (matchCountEl) matchCountEl.textContent = 'Loading…';
+
+    try {
+        const data = await fetchLiveApi();
         allMatches = data.matches || [];
-        updateLastUpdated(data.updated);
+        updateLastUpdated(data.updated, data.stale, data.warning, data.from_cache);
         displayMatches();
-
     } catch (error) {
         console.error('Error loading matches:', error);
-        document.getElementById('content').innerHTML = 
-            `<div class="error">⚠️ ${error.message}</div>`;
+        const hint = error.name === 'AbortError'
+            ? 'Request timed out. Goalserve may be slow or rate-limited — try Refresh.'
+            : error.message;
+        contentDiv.innerHTML = `
+            <div class="error">
+                <p>⚠️ ${escapeHtml(hint)}</p>
+                <button type="button" class="btn-retry" onclick="loadLiveMatches()">Retry</button>
+            </div>`;
+        if (matchCountEl) matchCountEl.textContent = 'Error';
     }
 }
 
 function displayMatches() {
     const contentDiv = document.getElementById('content');
-    
+
     let matches = allMatches;
-    
     if (filteredLeagueId) {
-        matches = allMatches.filter(m => m.league.id === filteredLeagueId);
+        matches = allMatches.filter(
+            m => String(m.league?.id) === String(filteredLeagueId)
+        );
     }
 
     document.getElementById('matchCount').textContent = `Total Matches: ${matches.length}`;
 
     if (matches.length === 0) {
-        contentDiv.innerHTML = '<div class="no-matches">No matches found</div>';
+        contentDiv.innerHTML = '<div class="no-matches">No live matches right now</div>';
         return;
     }
 
@@ -54,50 +85,30 @@ function createMatchCard(match) {
 
     const statusLabel = getStatusLabel(match.status);
     const statusClass = getStatusClass(match.status);
-
-    const league_id = match.league.id;
-    console.log("League", league_id);
-
     const recentEvents = events.slice(0, 4).map(event => createEventElement(event)).join('');
 
     return `
         <div class="match-card">
             <div class="league-info">
-                <span class="league-badge">${match.league.is_cup ? '🏆' : '⚽'} ${match.league.name} - ${match.league.id}</span>
+                <span class="league-badge">${match.league.is_cup ? '🏆' : '⚽'} ${match.league.name}</span>
                 <span>${match.date} ${match.time}</span>
-                
             </div>
-
             <div class="match-status ${statusClass}">${statusLabel}</div>
-
             <div class="match-score">
                 <div class="team">
                     <div class="team-name">${match.home_team.name}</div>
-                    <div class="time-info">${match.home_team.id}</div>
                 </div>
                 <div class="score-display">${match.home_team.goals} - ${match.away_team.goals}</div>
                 <div class="team">
                     <div class="team-name">${match.away_team.name}</div>
-                    <div class="time-info">${match.away_team.id}</div>
                 </div>
             </div>
-
             <div class="stats-grid">
                 ${createStatBox('Possession', possession.home || 0, possession.away || 0)}
                 ${createStatBox('Shots on Target', stats.shots_on_target?.home || 0, stats.shots_on_target?.away || 0)}
-                ${createStatBox('Shots off Target', stats.shots_off_target?.home || 0, stats.shots_off_target?.away || 0)}
-                
                 ${createStatBox('Corners', stats.corners?.home || 0, stats.corners?.away || 0)}
                 ${createStatBox('Yellow Cards', stats.yellow_cards?.home || 0, stats.yellow_cards?.away || 0)}
-                ${createStatBox('Attacks', stats.attacks?.home || 0, stats.attacks?.away || 0)}
-                ${createStatBox('Dangerous Attacks', stats.dangerous_attacks?.home || 0, stats.dangerous_attacks?.away || 0)}
-                ${createStatBox('Throw In', stats.throw_ins?.home || 0, stats.throw_ins?.away || 0)}
-                ${createStatBox('Goal Kicks', stats.goal_kicks?.home || 0, stats.goal_kicks?.away || 0)}
-                ${createStatBox('Free Kicks', stats.free_kicks?.home || 0, stats.free_kicks?.away || 0)}
-                ${createStatBox('Penalties', stats.penalties?.home || 0, stats.penalties?.away || 0)}
-                ${createStatBox('Subs', stats.substitutions?.home || 0, stats.substitutions?.away || 0)}
             </div>
-
             <div class="possession-bar">
                 <div class="possession-label">
                     <span>Possession</span>
@@ -108,34 +119,28 @@ function createMatchCard(match) {
                     <div class="possession-away" style="width: ${awayPos}%"></div>
                 </div>
             </div>
-
             ${recentEvents ? `
                 <div class="events-list">
                     <div class="events-title">Recent Events</div>
                     ${recentEvents}
                 </div>
             ` : ''}
-        </div>
-    `;
+        </div>`;
 }
 
 function createStatBox(label, homeValue, awayValue) {
-    const isHomeLead = homeValue > awayValue;
-    const leadClass = homeValue > awayValue ? 'home-lead' : (awayValue > homeValue ? 'away-lead' : '');
-
     return `
-        <div class="stat-box ${leadClass}">
+        <div class="stat-box">
             <div class="stat-label">${label}</div>
             <div class="stat-values">
                 <span class="stat-home">${homeValue}</span>
                 <span class="stat-away">${awayValue}</span>
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
 function createEventElement(event) {
-    const eventType = event.type.toLowerCase();
+    const eventType = (event.type || '').toLowerCase();
     const eventClass = getEventClass(eventType);
     const eventIcon = getEventIcon(eventType);
     const teamName = event.team === 'home' ? 'H' : 'A';
@@ -148,18 +153,17 @@ function createEventElement(event) {
                 <div class="event-team">${teamName} • ${event.assist ? 'Assist: ' + event.assist : ''}</div>
             </div>
             <span class="event-minute">${event.minute}'</span>
-        </div>
-    `;
+        </div>`;
 }
 
 function getStatusLabel(status) {
     const statusMap = {
-        'FT': '🏁 Full Time',
-        'HT': '⏸ Half Time',
-        'PST': '🏁 Post-Match',
-        'NOT': '⏳ Not Started',
+        FT: '🏁 Full Time',
+        HT: '⏸ Half Time',
+        PST: '🏁 Post-Match',
+        NOT: '⏳ Not Started',
         '45': '⏸ Half Time',
-        '90': '🏁 Full Time'
+        '90': '🏁 Full Time',
     };
     return statusMap[status] || `🔴 ${status}'`;
 }
@@ -172,26 +176,37 @@ function getStatusClass(status) {
 
 function getEventClass(type) {
     const classes = {
-        'goal': 'goal',
-        'yellowcard': 'yellow',
-        'redcard': 'red',
-        'substitution': 'sub'
+        goal: 'goal',
+        yellowcard: 'yellow',
+        redcard: 'red',
+        substitution: 'sub',
     };
     return classes[type] || '';
 }
 
 function getEventIcon(type) {
     const icons = {
-        'goal': '⚽',
-        'yellowcard': '🟨',
-        'redcard': '🟥',
-        'substitution': '🔄'
+        goal: '⚽',
+        yellowcard: '🟨',
+        redcard: '🟥',
+        substitution: '🔄',
     };
     return icons[type] || '•';
 }
 
-function updateLastUpdated(timestamp) {
-    document.getElementById('lastUpdated').textContent = `Last updated: ${timestamp || 'Just now'}`;
+function updateLastUpdated(timestamp, stale, warning, fromCache) {
+    const el = document.getElementById('lastUpdated');
+    let text = `Last updated: ${timestamp || 'Just now'}`;
+    if (fromCache) text += ' · served from 20s cache';
+    if (warning) text += ` · ${warning}`;
+    if (stale) text += ' (stale fallback)';
+    el.textContent = text;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = String(text ?? '');
+    return div.innerHTML;
 }
 
 document.getElementById('filterBtn').addEventListener('click', () => {
@@ -210,8 +225,4 @@ document.getElementById('clearFilterBtn').addEventListener('click', () => {
 
 document.getElementById('refreshBtn').addEventListener('click', loadLiveMatches);
 
-// Initial load
 loadLiveMatches();
-
-// // Auto-refresh every 30 seconds
-// setInterval(loadLiveMatches, 30000);
